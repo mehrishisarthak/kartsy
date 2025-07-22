@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ecommerce_shop/pages/bottomnav.dart';
-import 'package:ecommerce_shop/pages/login_after_signup.dart';
 import 'package:ecommerce_shop/pages/signup.dart';
 import 'package:ecommerce_shop/services/shared_preferences.dart';
 import 'package:ecommerce_shop/utils/authmethods.dart';
@@ -9,17 +8,20 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lottie/lottie.dart';
 
-class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+class LoginPageAfterSignup extends StatefulWidget {
+  const LoginPageAfterSignup({super.key});
 
   @override
-  State<LoginPage> createState() => _LoginPageState();
+  State<LoginPageAfterSignup> createState() => _LoginPageAfterSignupState();
 }
 
-class _LoginPageState extends State<LoginPage> {
+class _LoginPageAfterSignupState extends State<LoginPageAfterSignup> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
+  
+  //State to control the visibility of the "Resend Email" button
+  bool _showResendButton = false;
 
   @override
   void dispose() {
@@ -28,19 +30,48 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  void _showSnackBar(String message, {bool isError = false, Color? backgroundColor}) {
+  /// Shows a SnackBar with a given message and color.
+  void _showSnackBar(String message, {bool isError = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(
         content: Text(message),
-        backgroundColor: backgroundColor ?? (isError ? Colors.red : Colors.green),
+        backgroundColor: isError ? Colors.red : Colors.green,
         duration: const Duration(seconds: 3),
       ));
   }
 
-  Future<void> _handleLogin() async {
+  /// ⭐️ NEW: Function to resend the verification email.
+  Future<void> _resendVerificationEmail() async {
     setState(() => _isLoading = true);
+    try {
+      // Temporarily sign in the user to get a user object
+      final cred = await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
+
+      if (cred.user != null && !cred.user!.emailVerified) {
+        await cred.user!.sendEmailVerification();
+        _showSnackBar("A new verification email has been sent. Please check your inbox.");
+      }
+      // Sign out immediately after sending the email
+      await FirebaseAuth.instance.signOut();
+    } on FirebaseAuthException catch (e) {
+      _showSnackBar("Error: ${e.message}", isError: true);
+    } catch (e) {
+      _showSnackBar("An unexpected error occurred.", isError: true);
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _handleLogin() async {
+    setState(() {
+      _isLoading = true;
+      _showResendButton = false; // Reset on each login attempt
+    });
 
     try {
       final res = await AuthMethods().signInUser(
@@ -48,20 +79,7 @@ class _LoginPageState extends State<LoginPage> {
         password: _passwordController.text.trim(),
       );
 
-      // ⭐️ NEW: Check for the verification error specifically
-      if (res.contains("Please verify your email")) {
-        if (mounted) {
-          // Show a helpful message and then navigate
-          _showSnackBar(res, backgroundColor: Colors.orange.shade700);
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const LoginPageAfterSignup()),
-          );
-        }
-        return; // Stop further execution
-      }
-
-      // Handle other responses
+      // Handle different responses from AuthMethods
       if (res == "Login successful.") {
         _showSnackBar(res);
 
@@ -86,8 +104,13 @@ class _LoginPageState extends State<LoginPage> {
           );
         }
       } else {
-        // Handle all other errors
         _showSnackBar(res, isError: true);
+        // ⭐️ NEW: If the error is about verification, show the resend button
+        if (res.contains("Please verify your email")) {
+          setState(() {
+            _showResendButton = true;
+          });
+        }
       }
     } catch (e) {
       _showSnackBar("Login failed: ${e.toString()}", isError: true);
@@ -108,20 +131,20 @@ class _LoginPageState extends State<LoginPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Lottie.asset('images/login.json', height: 300),
-              const SizedBox(height: 30),
-              Text("Welcome Back",
+              Lottie.asset('images/login.json', height: 250),
+              const SizedBox(height: 20),
+              Text("Verify & Login",
                   style: GoogleFonts.lato(
                     fontSize: 28,
                     fontWeight: FontWeight.bold,
                     color: Colors.blue,
                   )),
               const SizedBox(height: 10),
-              Text("Login to your account",
+              Text("Check your email and login to continue",
+                  textAlign: TextAlign.center,
                   style: GoogleFonts.lato(fontSize: 16, color: Colors.grey[700])),
-              const SizedBox(height: 40),
+              const SizedBox(height: 30),
 
-              // 📩 Email Field
               TextField(
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
@@ -129,30 +152,13 @@ class _LoginPageState extends State<LoginPage> {
               ),
               const SizedBox(height: 20),
 
-              // 🔐 Password Field
               TextField(
                 controller: _passwordController,
                 obscureText: true,
                 decoration: _inputDecoration("Password", Icons.lock),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 30),
 
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: () {
-                    // TODO: Forgot password logic
-                  },
-                  child: Text("Forgot Password?",
-                      style: GoogleFonts.lato(
-                        color: Colors.blue,
-                        fontWeight: FontWeight.bold,
-                      )),
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // 🔘 Login Button
               SizedBox(
                 width: double.infinity,
                 height: 55,
@@ -177,13 +183,26 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 10),
 
-              // 📝 Redirect to Signup
+              // ⭐️ NEW: Conditionally show the "Resend Email" button
+              if (_showResendButton)
+                TextButton(
+                  onPressed: _isLoading ? null : _resendVerificationEmail,
+                  child: const Text(
+                    "Didn't get an email? Resend verification link",
+                    style: TextStyle(
+                      color: Colors.deepOrange,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+
+              const SizedBox(height: 20),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text("Don't have an account?", style: GoogleFonts.lato(fontSize: 15)),
+                  Text("Want to use a different account?", style: GoogleFonts.lato(fontSize: 15)),
                   TextButton(
                     onPressed: () {
                       Navigator.pushReplacement(

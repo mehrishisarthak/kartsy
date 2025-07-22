@@ -18,10 +18,9 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   String? uid;
-  String category = 'All';
   String userName = '';
   String userImageUrl = '';
-  bool _isLoading = true; // Add a loading state for initial data fetch
+  bool _isLoading = true;
 
   // Data-driven approach for categories for better scalability
   final List<Map<String, String>> categories = [
@@ -39,7 +38,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _initializeData();
   }
 
-  // 1. A single, safe initialization function
+  /// A single, safe initialization function to load all necessary data.
   Future<void> _initializeData() async {
     final prefs = SharedPreferenceHelper();
     uid = await prefs.getUserID();
@@ -59,7 +58,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // 2. Load cart data with proper error handling
+  /// Load cart data from Firestore and sync with the local CartProvider.
   Future<void> _loadCartData(String userId) async {
     try {
       final cartSnap = await FirebaseFirestore.instance
@@ -89,7 +88,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // 3. Simplified user data loading
+  /// Load user's name and profile image URL.
   Future<void> _loadUserData(String userId) async {
     final prefs = SharedPreferenceHelper();
     final name = await prefs.getUserName();
@@ -115,109 +114,252 @@ class _HomeScreenState extends State<HomeScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Top greeting + profile pic
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Hey, $userName!', style: AppWidget.boldTextStyle()),
-                            Text('Good day!', style: AppWidget.lightTextStyle()),
-                          ],
-                        ),
-                        GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => const ProfilePage()),
-                            );
-                          },
-                          child: Container(
-                            decoration: BoxDecoration(
-                              border: Border.all(color: Colors.blue, width: 2),
-                              shape: BoxShape.circle,
-                            ),
-                            child: ClipOval( // Use ClipOval for perfect circles
-                              child: userImageUrl.isNotEmpty
-                                  ? Image.network(
-                                      userImageUrl,
-                                      height: 50,
-                                      width: 50,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) => const Icon(Icons.person, size: 30), // Better fallback
-                                    )
-                                  : const CircleAvatar(
-                                      radius: 25,
-                                      child: Icon(Icons.person),
-                                    ),
-                            ),
+              child: SingleChildScrollView( // Changed to SingleChildScrollView for better layout flexibility
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Top greeting + profile pic
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Hey, $userName!', style: AppWidget.boldTextStyle()),
+                              Text('Good day!', style: AppWidget.lightTextStyle()),
+                            ],
                           ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 20.0),
-                    Text('What are you looking for?', style: AppWidget.lightTextStyle()),
-                    const SizedBox(height: 10),
-                    // ... your TextField ...
-
-                    const SizedBox(height: 30.0),
-                    Text('Categories', style: AppWidget.boldTextStyle()),
-                    const SizedBox(height: 20.0),
-                    SizedBox(
-                      height: 100,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: categories.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 10),
-                        itemBuilder: (context, index) {
-                          final categoryItem = categories[index];
-                          final isAll = categoryItem['name'] == 'All';
-
-                          return GestureDetector(
+                          GestureDetector(
                             onTap: () {
-                              final categoryName = categoryItem['name']!;
                               Navigator.push(
                                 context,
-                                MaterialPageRoute(
-                                  builder: (context) => CategoryProducts(category: categoryName),
-                                ),
+                                MaterialPageRoute(builder: (_) => const ProfilePage()),
                               );
                             },
                             child: Container(
-                              width: 100,
                               decoration: BoxDecoration(
-                                color: isAll ? Colors.blue : Colors.transparent,
                                 border: Border.all(color: Colors.blue, width: 2),
-                                borderRadius: BorderRadius.circular(10),
+                                shape: BoxShape.circle,
                               ),
-                              child: isAll
-                                  ? Center(
-                                      child: Text(
-                                        'All',
-                                        style: AppWidget.boldTextStyle().copyWith(color: Colors.white, fontSize: 18),
+                              child: ClipOval(
+                                child: userImageUrl.isNotEmpty
+                                    ? Image.network(
+                                        userImageUrl,
+                                        height: 50,
+                                        width: 50,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, __, ___) => const Icon(Icons.person, size: 30),
+                                      )
+                                    : const CircleAvatar(
+                                        radius: 25,
+                                        child: Icon(Icons.person),
                                       ),
-                                    )
-                                  : ClipRRect(
-                                      borderRadius: BorderRadius.circular(8),
-                                      child: Image.asset(categoryItem['image']!, fit: BoxFit.contain, // Use contain for logos
-                                      ),
-                                    ),
+                              ),
                             ),
-                          );
-                        },
+                          ),
+                        ],
                       ),
-                    ),
 
-                    const SizedBox(height: 30.0),
-                    // ... your Featured Products Row and StreamBuilder ...
-                  ],
+                      const SizedBox(height: 20.0),
+                      Text('What are you looking for?', style: AppWidget.lightTextStyle()),
+                      const SizedBox(height: 10),
+                      // --- Search TextField ---
+                      TextField(
+                        decoration: InputDecoration(
+                          hintText: 'Search for products',
+                          prefixIcon: const Icon(Icons.search),
+                          filled: true,
+                          fillColor: const Color.fromARGB(255, 240, 240, 240),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(20.0),
+                            borderSide: const BorderSide(color: Colors.blue),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(20.0),
+                            borderSide: const BorderSide(color: Colors.blue),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(20.0),
+                            borderSide: const BorderSide(color: Colors.blue, width: 2.0),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 30.0),
+                      Text('Categories', style: AppWidget.boldTextStyle()),
+                      const SizedBox(height: 20.0),
+                      // --- Categories List ---
+                      SizedBox(
+                        height: 100,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: categories.length,
+                          separatorBuilder: (_, __) => const SizedBox(width: 10),
+                          itemBuilder: (context, index) {
+                            final categoryItem = categories[index];
+                            final isAll = categoryItem['name'] == 'All';
+
+                            return GestureDetector(
+                              onTap: () {
+                                final categoryName = categoryItem['name']!;
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => CategoryProducts(category: categoryName),
+                                  ),
+                                );
+                              },
+                              child: Container(
+                                width: 100,
+                                decoration: BoxDecoration(
+                                  color: isAll ? Colors.blue : Colors.transparent,
+                                  border: Border.all(color: Colors.blue, width: 2),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: isAll
+                                    ? Center(
+                                        child: Text(
+                                          'All',
+                                          style: AppWidget.boldTextStyle().copyWith(color: Colors.white, fontSize: 18),
+                                        ),
+                                      )
+                                    : ClipRRect(
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(8.0), // Add padding for images
+                                          child: Image.asset(categoryItem['image']!, fit: BoxFit.contain),
+                                        ),
+                                      ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+
+                      const SizedBox(height: 30.0),
+                      // --- Featured Products Section ---
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Featured Products', style: AppWidget.boldTextStyle()),
+                          GestureDetector(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (context) => const DiscoverPage()),
+                              );
+                            },
+                            child: Text(
+                              'See All',
+                              style: AppWidget.lightTextStyle().copyWith(
+                                color: Colors.blue,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20.0),
+                      SizedBox(
+                        height: 260,
+                        child: StreamBuilder<QuerySnapshot>(
+                          stream: FirebaseFirestore.instance.collection('products').snapshots(),
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState == ConnectionState.waiting) {
+                              return const Center(child: CircularProgressIndicator());
+                            }
+                            if (snapshot.hasError) {
+                              return const Center(child: Text("Something went wrong"));
+                            }
+
+                            final products = snapshot.data?.docs ?? [];
+                            if (products.isEmpty) {
+                              return const Center(child: Text("No products found"));
+                            }
+
+                            return ListView.separated(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: products.length,
+                              separatorBuilder: (_, __) => const SizedBox(width: 12),
+                              itemBuilder: (context, index) {
+                                final product = products[index].data() as Map<String, dynamic>;
+                                final name = product['Name'] ?? 'Product';
+                                final price = product['Price'] ?? '--';
+                                final image = product['Image'] ?? '';
+
+                                return GestureDetector(
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => ProductDetails(productData: product),
+                                      ),
+                                    );
+                                  },
+                                  child: Container(
+                                    width: 160,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      border: Border.all(color: Colors.blue.shade200, width: 1.5),
+                                      borderRadius: BorderRadius.circular(10),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.grey.withOpacity(0.1),
+                                          spreadRadius: 1,
+                                          blurRadius: 5,
+                                        )
+                                      ]
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.center,
+                                      children: [
+                                        if (image.isNotEmpty)
+                                          ClipRRect(
+                                            borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                                            child: Image.network(
+                                              image,
+                                              height: 140,
+                                              width: double.infinity,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, size: 80),
+                                            ),
+                                          ),
+                                        const Spacer(),
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                                          child: Text(
+                                            name,
+                                            style: AppWidget.boldTextStyle().copyWith(fontSize: 16),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        const Spacer(),
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                                          child: Text(
+                                            '₹$price',
+                                            style: AppWidget.lightTextStyle().copyWith(
+                                              color: Colors.blue,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 17,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

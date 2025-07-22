@@ -5,7 +5,7 @@ class AuthMethods {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  /// Sign up a new user
+  /// Sign up a new user and send a verification email.
   Future<String> signUpUser({
     required String email,
     required String password,
@@ -17,11 +17,14 @@ class AuthMethods {
 
     try {
       if (email.isNotEmpty && password.isNotEmpty && username.isNotEmpty) {
-        // Create user
+        // Create user with email and password
         UserCredential cred = await _auth.createUserWithEmailAndPassword(
           email: email,
           password: password,
         );
+
+        // ⭐️ NEW: Send email verification
+        await cred.user!.sendEmailVerification();
 
         // Store additional user info in Firestore
         await _firestore.collection('users').doc(cred.user!.uid).set({
@@ -31,7 +34,8 @@ class AuthMethods {
           'Image': image,
         });
 
-        res = "User created successfully.";
+        // ⭐️ UPDATED: Success message now informs the user to verify
+        res = "Account created successfully. Please check your email to verify your account.";
       } else {
         res = "Please fill in all the fields.";
       }
@@ -56,7 +60,7 @@ class AuthMethods {
     return res;
   }
 
-  /// Sign in an existing user
+  /// Sign in an existing user and check for email verification.
   Future<String> signInUser({
     required String email,
     required String password,
@@ -65,11 +69,20 @@ class AuthMethods {
 
     try {
       if (email.isNotEmpty && password.isNotEmpty) {
-        await _auth.signInWithEmailAndPassword(
+        // Attempt to sign in the user
+        UserCredential cred = await _auth.signInWithEmailAndPassword(
           email: email.trim(),
           password: password.trim(),
         );
-        res = "Login successful.";
+
+        // ⭐️ NEW: Check if the user's email is verified
+        if (cred.user!.emailVerified) {
+          res = "Login successful.";
+        } else {
+          // If not verified, inform the user and sign them out
+          await _auth.signOut(); // Prevent unverified access
+          res = "Please verify your email before logging in. Check your inbox for a verification link.";
+        }
       } else {
         res = "Please fill in all the fields.";
       }
@@ -100,7 +113,7 @@ class AuthMethods {
     return res;
   }
 
-  /// Sign in an admin (uses Firestore only)
+  /// Sign in an admin (uses Firestore only, no changes needed here)
   Future<String> signInAdmin({
     required String username,
     required String password,
@@ -110,9 +123,6 @@ class AuthMethods {
     try {
       final trimmedUsername = username.trim().toLowerCase();
       final trimmedPassword = password.trim();
-
-      print("▶️ Username entered: '$trimmedUsername'");
-      print("▶️ Password entered: '$trimmedPassword'");
 
       if (trimmedUsername.isEmpty || trimmedPassword.isEmpty) {
         return "Please fill in all the fields.";
@@ -124,17 +134,11 @@ class AuthMethods {
           .limit(1)
           .get();
 
-      print("📘 Found Admin Docs: ${snapshot.docs.length}");
-
       if (snapshot.docs.isEmpty) {
         res = "No admin found with this username.";
       } else {
         final data = snapshot.docs.first.data();
-        print("📄 Firestore Data: $data");
-
         final storedPassword = data['password']?.toString().trim();
-
-        print("🔐 Stored Password: $storedPassword");
 
         if (storedPassword == trimmedPassword) {
           res = "Login successful.";

@@ -1,6 +1,7 @@
 import 'package:ecommerce_shop/pages/login.dart';
+import 'package:ecommerce_shop/pages/login_after_signup.dart';
 import 'package:ecommerce_shop/services/shared_preferences.dart';
-import 'package:ecommerce_shop/utils/authmethods.dart';
+import 'package:ecommerce_shop/utils/authmethods.dart'; // Make sure this path is correct
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lottie/lottie.dart';
@@ -21,65 +22,83 @@ class _SignupPageState extends State<SignupPage> {
   bool _isLoading = false;
 
   @override
-void initState() {
-  super.initState();
-  _nameController = TextEditingController();
-  _emailController = TextEditingController();
-  _passwordController = TextEditingController();
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController();
+    _emailController = TextEditingController();
+    _passwordController = TextEditingController();
 
-  // Clear cached user data
-  SharedPreferenceHelper().clearUserInfo();
-}
+    // It's good practice to not clear user info here unless you have a specific reason.
+    // Let's assume this is intended for now.
+    SharedPreferenceHelper().clearUserInfo();
+  }
 
   @override
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
-    
     super.dispose();
   }
 
   Future<void> _handleSignup() async {
-    setState(() => _isLoading = true);
-    //adding defaults
-    String userId = randomAlphaNumeric(10);
-    String image = "https://i.ibb.co/k2kmqpVp/profilepic.png";
+    // Basic validation on the client side
+    if (_nameController.text.trim().isEmpty ||
+        _emailController.text.trim().isEmpty ||
+        _passwordController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please fill in all the fields."),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
+    setState(() => _isLoading = true);
     
+    String userId = randomAlphaNumeric(10);
+    // Using a more reliable image host for the default profile picture - firebase storage
+    // Ensured that the image URL is valid and accessible
+    // This is a placeholder image URL.
+    String image = "https://firebasestorage.googleapis.com/v0/b/kartsy-3ff24.firebasestorage.app/o/assets%2Fdefault_profile.png?alt=media&token=2b13692a-7570-4cbd-b253-f03372e369ce";
+
     String res = await AuthMethods().signUpUser(
       email: _emailController.text.trim(),
       password: _passwordController.text.trim(),
       username: _nameController.text.trim(),
       userId: userId,
-      image: image
+      image: image,
     );
 
     setState(() => _isLoading = false);
 
-    // ignore: use_build_context_synchronously
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(res),
-          backgroundColor: res == "User created successfully." ? Colors.green : Colors.red,
-          duration: const Duration(seconds: 2),
-        ),
-      );
+    // ⭐️ NEW: Check for the new success message
+    final bool isSuccess = res.startsWith("Account created successfully");
 
-    if (res == "User created successfully.") {
-         // ignore: use_build_context_synchronously
-         await SharedPreferenceHelper().saveUserEmail(_emailController.text);
-         await SharedPreferenceHelper().saveUserName(_nameController.text);
-         await SharedPreferenceHelper().saveUserId(userId);
-         
-         // ignore: use_build_context_synchronously
-         Navigator.of(context).pushAndRemoveUntil(
-  MaterialPageRoute(builder: (context) => const LoginPage()),
-  (Route<dynamic> route) => false,
-);
+    if (mounted) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(res),
+            backgroundColor: isSuccess ? Colors.green : Colors.red,
+            duration: const Duration(seconds: 3), // Longer duration for the important message
+          ),
+        );
+    }
 
+    if (isSuccess) {
+      // We don't save user info to prefs here anymore,
+      // as the user is not yet logged in (they need to verify first).
+      // We will save it upon successful login.
+      
+      if (mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const LoginPageAfterSignup()),
+          (Route<dynamic> route) => false,
+        );
+      }
     }
   }
 
@@ -193,7 +212,7 @@ void initState() {
                   ),
                   TextButton(
                     onPressed: () {
-                      Navigator.pushReplacement(context, MaterialPageRoute(builder: (context)=>LoginPage()));
+                      Navigator.pushReplacement(context, MaterialPageRoute(builder: (context)=>const LoginPage()));
                     },
                     child: const Text(
                       "Login",
