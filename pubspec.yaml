@@ -1,0 +1,53 @@
+name: ecommerce_shop
+description: "A new Flutter project."
+publish_to: 'none' # This prevents publishing to pub.dev
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.8.0
+
+dependencies:
+  cloud_firestore: ^5.6.9
+  cupertino_icons: ^1.0.8
+  curved_navigation_bar: ^1.0.6
+  firebase_app_check: ^0.3.2+9
+  firebase_auth: ^5.6.0
+  firebase_core: ^3.14.0
+  firebase_storage: ^12.4.7
+  flutter:
+    sdk: flutter
+  google_fonts: ^6.2.1
+  image_picker: ^1.1.2
+  lottie: ^3.3.1
+  provider: ^6.1.5
+  random_string: ^2.3.1
+  shared_preferences: ^2.5.3
+
+dev_dependencies:
+  flutter_launcher_icons: ^0.14.4
+  flutter_lints: ^5.0.0
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+  assets:
+    - lib/assets/images/1.jpg
+    - lib/assets/images/3.jpg
+    - lib/assets/images/white.png
+    - images/products/headphone.png
+    - images/products/laptop.png
+    - images/products/tv.png
+    - images/products/watch.png
+    - images/listings/headphone.png
+    - images/login.json
+    - images/emptyCart.json
+    - images/admin.gif
+    - lib/assets/images/default_profile.png
+    - lib/assets/images/app_icon.png
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "lib/assets/images/app_icon.png"
