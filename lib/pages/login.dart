@@ -65,28 +65,8 @@ class _LoginPageState extends State<LoginPage> {
       await SharedPreferenceHelper().saveUserId(uid);
       await SharedPreferenceHelper().saveUserImage(userData['Image']);
 
-      // Fetch cart data safely
-      final cartSnap = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('cart')
-          .get();
 
-      final cartItems = cartSnap.docs.map((doc) {
-        final data = doc.data();
-        return {
-          'id': doc.id,
-          'name': data['name'] ?? 'Unnamed',
-          'price': (data['price'] is num) ? (data['price'] as num).toDouble() : 0.0,
-          'quantity': (data['quantity'] is int) ? data['quantity'] : 1,
-          'image': data['image'] ?? '',
-        };
-      }).toList();
-
-      // 🧠 Sync with CartProvider
-      final cartProvider = Provider.of<CartProvider>(context, listen: false);
-      cartProvider.setCart(cartItems);
-
+      // 🏠 Navigate to BottomBar
       if (mounted) {
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (context) => const BottomBar()),

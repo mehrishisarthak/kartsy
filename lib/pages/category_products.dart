@@ -6,8 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class CategoryProducts extends StatefulWidget {
-  const CategoryProducts({super.key, required this.cateogry});
-  final String cateogry;
+  const CategoryProducts({super.key, required this.category});
+  final String category;
 
   @override
   State<CategoryProducts> createState() => _CategoryProductsState();
@@ -17,7 +17,7 @@ class _CategoryProductsState extends State<CategoryProducts> {
   Stream<QuerySnapshot>? listings;
 
   getOnTheLoad() async {
-    listings = await DatabaseMethods().getListings(widget.cateogry);
+    listings = await DatabaseMethods().getListings(widget.category);
     setState(() {});
   }
 
@@ -41,7 +41,7 @@ class _CategoryProductsState extends State<CategoryProducts> {
           ),
         ),
         title: Text(
-          widget.cateogry,
+          widget.category,
           style: AppWidget.boldTextStyle().copyWith(
             color: Colors.blue,
             fontSize: 24,
