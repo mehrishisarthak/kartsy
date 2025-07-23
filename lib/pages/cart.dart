@@ -1,11 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ecommerce_shop/services/cart_provider.dart';
 import 'package:ecommerce_shop/services/shared_preferences.dart';
+import 'package:ecommerce_shop/utils/database.dart';
 import 'package:ecommerce_shop/widget/support_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lottie/lottie.dart';
 import 'package:provider/provider.dart';
+
 
 class CartPage extends StatefulWidget {
   const CartPage({super.key});
@@ -16,7 +18,6 @@ class CartPage extends StatefulWidget {
 
 class _CartPageState extends State<CartPage> {
   String? userID;
-  // State variable to track if an operation is in progress.
   bool _isBusy = false;
 
   @override
@@ -32,17 +33,22 @@ class _CartPageState extends State<CartPage> {
     }
   }
 
-  /// Wraps any cart action to handle the busy state.
-  /// It disables buttons, runs the action, waits 1 second, then re-enables them.
+  void _showSnackBar(String message, {bool isError = false}) {
+     if (!mounted) return;
+     ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Colors.red : Colors.green,
+      ));
+  }
+
   Future<void> _handleCartInteraction(Future<void> Function() action) async {
-    if (_isBusy) return; // Prevent new actions while one is in progress
-
+    if (_isBusy) return;
     setState(() => _isBusy = true);
-
     try {
       await action();
     } finally {
-      // Wait 1 second before allowing another interaction
       await Future.delayed(const Duration(seconds: 1));
       if (mounted) {
         setState(() => _isBusy = false);
@@ -50,22 +56,16 @@ class _CartPageState extends State<CartPage> {
     }
   }
 
-  /// Updates item quantity with optimistic UI and rollback.
   Future<void> updateItemQuantity(String id, int delta) async {
     if (userID == null) return;
-
     final cartProvider = Provider.of<CartProvider>(context, listen: false);
-    // Optimistic UI update
     cartProvider.updateQuantity(id, delta);
-
     try {
       final docRef = FirebaseFirestore.instance.collection('users').doc(userID).collection('cart').doc(id);
       await FirebaseFirestore.instance.runTransaction((transaction) async {
         final snapshot = await transaction.get(docRef);
         if (!snapshot.exists) return;
-
         final newQuantity = (snapshot.data()?['quantity'] ?? 0) + delta;
-
         if (newQuantity <= 0) {
           transaction.delete(docRef);
         } else {
@@ -73,45 +73,52 @@ class _CartPageState extends State<CartPage> {
         }
       });
     } catch (e) {
-      // Rollback on failure
       cartProvider.updateQuantity(id, -delta);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not update item. Please try again.'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        _showSnackBar('Could not update item. Please try again.', isError: true);
       }
     }
   }
 
-  /// Removes an item with optimistic UI and rollback.
   Future<void> removeItem(String id) async {
     if (userID == null) return;
-    
     final cartProvider = Provider.of<CartProvider>(context, listen: false);
-    // Find the item to be removed so we can add it back on failure
     final itemIndex = cartProvider.cart.indexWhere((item) => item['id'] == id);
     if (itemIndex == -1) return;
     final itemToRemove = cartProvider.cart[itemIndex];
-
-    // Optimistic UI update
     cartProvider.removeFromCart(id);
-
     try {
       await FirebaseFirestore.instance.collection('users').doc(userID).collection('cart').doc(id).delete();
     } catch (e) {
-      // Rollback on failure
       cartProvider.addItemAt(itemIndex, itemToRemove);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not remove item. Please try again.'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        _showSnackBar('Could not remove item. Please try again.', isError: true);
       }
+    }
+  }
+
+  // ⭐️ NEW: Function to handle placing the order
+  Future<void> _handlePlaceOrder() async {
+    if (userID == null) {
+      _showSnackBar("Please log in to place an order.", isError: true);
+      return;
+    }
+
+    setState(() => _isBusy = true);
+
+    final cartProvider = Provider.of<CartProvider>(context, listen: false);
+    final cartItems = List<Map<String, dynamic>>.from(cartProvider.cart);
+
+    final result = await DatabaseMethods().placeOrder(
+      userId: userID!,
+      cartItems: cartItems,
+      cartProvider: cartProvider,
+    );
+
+    _showSnackBar(result, isError: !result.contains("successfully"));
+
+    if (mounted) {
+      setState(() => _isBusy = false);
     }
   }
 
@@ -121,7 +128,7 @@ class _CartPageState extends State<CartPage> {
     final cart = cartProvider.cart;
 
     final total = cart.fold<double>(
-        0, (sum, item) => sum + (item['price'] as num) * (item['quantity'] as num));
+        0, (sum, item) => sum + (item['Price'] as num) * (item['quantity'] as num));
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FB),
@@ -202,7 +209,7 @@ class _CartPageState extends State<CartPage> {
                                 bottomLeft: Radius.circular(16),
                               ),
                               child: Image.network(
-                                item['image'],
+                                item['Image'],
                                 width: 120,
                                 height: 120,
                                 fit: BoxFit.cover,
@@ -219,7 +226,7 @@ class _CartPageState extends State<CartPage> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      item['name'],
+                                      item['Name'],
                                       style: AppWidget.boldTextStyle().copyWith(
                                         fontSize: 20,
                                         color: Colors.black87,
@@ -229,7 +236,7 @@ class _CartPageState extends State<CartPage> {
                                     ),
                                     const SizedBox(height: 8),
                                     Text(
-                                      '₹${item['price']} x ${item['quantity']}',
+                                      '₹${item['Price']} x ${item['quantity']}',
                                       style: GoogleFonts.lato(
                                         fontSize: 16,
                                         color: Colors.grey[800],
@@ -301,26 +308,20 @@ class _CartPageState extends State<CartPage> {
                           width: double.infinity,
                           height: 50,
                           child: ElevatedButton(
-                            // Disable checkout button during cart interactions
-                            onPressed: _isBusy ? null : () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  backgroundColor: Colors.green,
-                                  content: Text("Order placed successfully!"),
-                                ),
-                              );
-                            },
+                            // ⭐️ UPDATED: Connect the button to the new handler
+                            onPressed: _isBusy ? null : _handlePlaceOrder,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.blue,
-                              // ignore: deprecated_member_use
                               disabledBackgroundColor: Colors.blue.withOpacity(0.5),
                               elevation: 6,
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             ),
-                            child: const Text(
-                              "Place Order",
-                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
-                            ),
+                            child: _isBusy
+                                ? const CircularProgressIndicator(color: Colors.white)
+                                : const Text(
+                                    "Place Order",
+                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                                  ),
                           ),
                         ),
                       ],

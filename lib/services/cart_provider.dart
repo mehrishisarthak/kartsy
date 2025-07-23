@@ -67,4 +67,10 @@ class CartProvider extends ChangeNotifier {
       return sum + price * quantity;
     });
   }
+  
+  // Clears the cart and notifies listeners
+  void clearCart() {
+    _cart.clear();
+    notifyListeners();
+  }
 }

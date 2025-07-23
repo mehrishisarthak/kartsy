@@ -161,16 +161,19 @@ class _ProductDetailsState extends State<ProductDetails> {
                               softWrap: true,
                             ),
                           ),
-                          Text(
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
                             '₹${product['Price'] ?? '--'}',
                             style: AppWidget.boldTextStyle().copyWith(
-                              fontSize: 26,
+                              fontSize: 30,
+                              fontWeight: FontWeight.w900,
                               color: Colors.blue,
                             ),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
+                          
+                          const SizedBox(height: 10),
 
                       // Details heading
                       Text(

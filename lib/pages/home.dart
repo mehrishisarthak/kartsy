@@ -69,12 +69,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
       final cartItems = cartSnap.docs.map((doc) {
         final data = doc.data();
+        // ✅ FIX: Added the missing 'adminId' and 'category' fields to ensure all necessary data is synced.
         return {
           'id': doc.id,
-          'name': data['name'] ?? 'Unnamed',
-          'price': (data['price'] as num?)?.toDouble() ?? 0.0,
+          'Name': data['Name'] ?? 'Unnamed', // Using consistent 'Name' key
+          'Price': (data['Price'] as num?)?.toDouble() ?? 0.0, // Using consistent 'Price' key
           'quantity': (data['quantity'] as int?) ?? 1,
-          'image': data['image'] ?? '',
+          'Image': data['Image'] ?? '', // Using consistent 'Image' key
+          'adminId': data['adminId'], // Added adminId
+          'category': data['category'], // Added category
         };
       }).toList();
 
@@ -114,7 +117,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SafeArea(
-              child: SingleChildScrollView( // Changed to SingleChildScrollView for better layout flexibility
+              child: SingleChildScrollView(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
                   child: Column(
@@ -228,7 +231,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     : ClipRRect(
                                         borderRadius: BorderRadius.circular(8),
                                         child: Padding(
-                                          padding: const EdgeInsets.all(8.0), // Add padding for images
+                                          padding: const EdgeInsets.all(8.0),
                                           child: Image.asset(categoryItem['image']!, fit: BoxFit.contain),
                                         ),
                                       ),
@@ -284,17 +287,25 @@ class _HomeScreenState extends State<HomeScreen> {
                               itemCount: products.length,
                               separatorBuilder: (_, __) => const SizedBox(width: 12),
                               itemBuilder: (context, index) {
-                                final product = products[index].data() as Map<String, dynamic>;
-                                final name = product['Name'] ?? 'Product';
-                                final price = product['Price'] ?? '--';
-                                final image = product['Image'] ?? '';
+                                final productDoc = products[index];
+                                final productData = productDoc.data() as Map<String, dynamic>;
+                                
+                                // Create a complete product map to pass to the details page
+                                final completeProductData = {
+                                  ...productData,
+                                  'id': productDoc.id, // Ensure the document ID is included
+                                };
+                                
+                                final name = completeProductData['Name'] ?? 'Product';
+                                final price = completeProductData['Price'] ?? '--';
+                                final image = completeProductData['Image'] ?? '';
 
                                 return GestureDetector(
                                   onTap: () {
                                     Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                        builder: (_) => ProductDetails(productData: product),
+                                        builder: (_) => ProductDetails(productData: completeProductData),
                                       ),
                                     );
                                   },
@@ -313,7 +324,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                       ]
                                     ),
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.center,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         if (image.isNotEmpty)
                                           ClipRRect(
