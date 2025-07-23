@@ -18,6 +18,7 @@ dependencies:
   flutter:
     sdk: flutter
   google_fonts: ^6.2.1
+  google_sign_in: ^6.2.1
   image_picker: ^1.1.2
   lottie: ^3.3.1
   provider: ^6.1.5
@@ -37,6 +38,7 @@ flutter:
     - lib/assets/images/3.jpg
     - lib/assets/images/white.png
     - images/products/headphone.png
+    - images/icons/google.png
     - images/products/laptop.png
     - images/products/tv.png
     - images/products/watch.png
