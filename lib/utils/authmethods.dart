@@ -144,7 +144,9 @@ class AuthMethods {
             'Name': user.displayName ?? 'No Name Provided',
             'Email': user.email ?? 'No Email Provided',
             'Id': user.uid, // Use the Firebase UID as the primary ID
-            'Image': user.photoURL ?? "https://i.ibb.co/k2kmqpV/profilepic.png",
+            // Default image if none provided
+            // google accounts usually have a profile image, we use it else we set a default
+            'Image': user.photoURL ?? "https://firebasestorage.googleapis.com/v0/b/kartsy-3ff24.firebasestorage.app/o/assets%2Fdefault_profile.png?alt=media&token=2038c7c3-dd79-41f1-b5bd-30e39e76af5d",
           });
         }
         res = "Login successful.";
