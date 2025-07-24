@@ -8,7 +8,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:lottie/lottie.dart';
 import 'package:provider/provider.dart';
 
-
 class CartPage extends StatefulWidget {
   const CartPage({super.key});
 
@@ -34,8 +33,8 @@ class _CartPageState extends State<CartPage> {
   }
 
   void _showSnackBar(String message, {bool isError = false}) {
-     if (!mounted) return;
-     ScaffoldMessenger.of(context)
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(
         content: Text(message),
@@ -49,64 +48,71 @@ class _CartPageState extends State<CartPage> {
     try {
       await action();
     } finally {
-      await Future.delayed(const Duration(seconds: 1));
+      // Small delay to prevent rapid-fire clicks
+      await Future.delayed(const Duration(milliseconds: 500));
       if (mounted) {
         setState(() => _isBusy = false);
       }
     }
   }
 
-  Future<void> updateItemQuantity(String id, int delta) async {
+  // REWRITTEN: Handles quantity updates robustly
+  Future<void> updateItemQuantity(Map<String, dynamic> item, int delta) async {
     if (userID == null) return;
+
     final cartProvider = Provider.of<CartProvider>(context, listen: false);
-    cartProvider.updateQuantity(id, delta);
+    cartProvider.updateQuantity(item['id'], delta); // Optimistic UI update
+
     try {
-      final docRef = FirebaseFirestore.instance.collection('users').doc(userID).collection('cart').doc(id);
-      await FirebaseFirestore.instance.runTransaction((transaction) async {
-        final snapshot = await transaction.get(docRef);
-        if (!snapshot.exists) return;
-        final newQuantity = (snapshot.data()?['quantity'] ?? 0) + delta;
-        if (newQuantity <= 0) {
-          transaction.delete(docRef);
-        } else {
-          transaction.update(docRef, {'quantity': FieldValue.increment(delta)});
-        }
-      });
+      final docRef = FirebaseFirestore.instance.collection('users').doc(userID).collection('cart').doc(item['id']);
+      final newQuantity = (item['quantity'] as int) + delta;
+
+      if (newQuantity > 0) {
+        await docRef.update({'quantity': newQuantity});
+      } else {
+        await docRef.delete(); // Remove item if quantity is zero or less
+      }
     } catch (e) {
-      cartProvider.updateQuantity(id, -delta);
+      cartProvider.updateQuantity(item['id'], -delta); // Revert UI on error
       if (mounted) {
         _showSnackBar('Could not update item. Please try again.', isError: true);
       }
     }
   }
 
-  Future<void> removeItem(String id) async {
+  // REWRITTEN: Handles item removal robustly
+  Future<void> removeItem(Map<String, dynamic> item) async {
     if (userID == null) return;
+
     final cartProvider = Provider.of<CartProvider>(context, listen: false);
-    final itemIndex = cartProvider.cart.indexWhere((item) => item['id'] == id);
+    final itemIndex = cartProvider.cart.indexWhere((i) => i['id'] == item['id']);
     if (itemIndex == -1) return;
-    final itemToRemove = cartProvider.cart[itemIndex];
-    cartProvider.removeFromCart(id);
+
+    cartProvider.removeFromCart(item['id']); // Optimistic UI update
+
     try {
-      await FirebaseFirestore.instance.collection('users').doc(userID).collection('cart').doc(id).delete();
+      await FirebaseFirestore.instance.collection('users').doc(userID).collection('cart').doc(item['id']).delete();
     } catch (e) {
-      cartProvider.addItemAt(itemIndex, itemToRemove);
+      cartProvider.addItemAt(itemIndex, item); // Revert UI on error
       if (mounted) {
         _showSnackBar('Could not remove item. Please try again.', isError: true);
       }
     }
   }
 
-  // ⭐️ NEW: Function to handle placing the order
+  // Handles placing the order
   Future<void> _handlePlaceOrder() async {
     if (userID == null) {
       _showSnackBar("Please log in to place an order.", isError: true);
       return;
     }
 
-    setState(() => _isBusy = true);
-
     final cartProvider = Provider.of<CartProvider>(context, listen: false);
+    if (cartProvider.cart.isEmpty) {
+      _showSnackBar("Your cart is empty.", isError: true);
+      return;
+    }
+    
     final cartItems = List<Map<String, dynamic>>.from(cartProvider.cart);
 
     final result = await DatabaseMethods().placeOrder(
@@ -116,10 +122,6 @@ class _CartPageState extends State<CartPage> {
     );
 
     _showSnackBar(result, isError: !result.contains("successfully"));
-
-    if (mounted) {
-      setState(() => _isBusy = false);
-    }
   }
 
   @override
@@ -127,8 +129,15 @@ class _CartPageState extends State<CartPage> {
     final cartProvider = Provider.of<CartProvider>(context);
     final cart = cartProvider.cart;
 
-    final total = cart.fold<double>(
-        0, (sum, item) => sum + (item['Price'] as num) * (item['quantity'] as num));
+    final total = cart.fold<double>(0, (sum, item) {
+  // Safely get price or default to 0 if null
+  final price = item['Price'] as num? ?? 0;
+  
+  // Safely get quantity or default to 0 if null
+  final quantity = item['quantity'] as num? ?? 0;
+
+  return sum + (price * quantity);
+});
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FB),
@@ -186,7 +195,6 @@ class _CartPageState extends State<CartPage> {
                     itemCount: cart.length,
                     itemBuilder: (context, index) {
                       final item = cart[index];
-                      final itemId = item['id'];
 
                       return Container(
                         margin: const EdgeInsets.only(bottom: 16),
@@ -248,21 +256,21 @@ class _CartPageState extends State<CartPage> {
                                         IconButton(
                                           icon: const Icon(Icons.remove_circle_outline),
                                           onPressed: _isBusy ? null : () => _handleCartInteraction(
-                                            () => updateItemQuantity(itemId, -1),
+                                            () => updateItemQuantity(item, -1),
                                           ),
                                         ),
                                         Text('${item['quantity']}', style: AppWidget.boldTextStyle()),
                                         IconButton(
                                           icon: const Icon(Icons.add_circle_outline),
                                           onPressed: _isBusy ? null : () => _handleCartInteraction(
-                                            () => updateItemQuantity(itemId, 1),
+                                            () => updateItemQuantity(item, 1),
                                           ),
                                         ),
                                         const Spacer(),
                                         IconButton(
                                           icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
                                           onPressed: _isBusy ? null : () => _handleCartInteraction(
-                                            () => removeItem(itemId),
+                                            () => removeItem(item),
                                           ),
                                         ),
                                       ],
@@ -308,7 +316,6 @@ class _CartPageState extends State<CartPage> {
                           width: double.infinity,
                           height: 50,
                           child: ElevatedButton(
-                            // ⭐️ UPDATED: Connect the button to the new handler
                             onPressed: _isBusy ? null : _handlePlaceOrder,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.blue,

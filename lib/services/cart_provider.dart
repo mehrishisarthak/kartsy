@@ -1,8 +1,8 @@
+import 'package:ecommerce_shop/utils/database.dart';
 import 'package:flutter/foundation.dart';
 
-class CartProvider extends ChangeNotifier {
+class CartProvider with ChangeNotifier {
   final List<Map<String, dynamic>> _cart = [];
-
   List<Map<String, dynamic>> get cart => _cart;
 
   void setCart(List<Map<String, dynamic>> items) {
@@ -12,29 +12,37 @@ class CartProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void addProduct(Map<String, dynamic> product) {
-    final id = product['id'] as String;
-    final index = _cart.indexWhere((item) => item['id'] == id);
-    if (index != -1) {
-      _cart[index]['quantity'] = (_cart[index]['quantity'] as int) + 1;
+  // ✅ UNIFIED AND SAFE addToCart METHOD
+  Future<void> addToCart(String userId, Map<String, dynamic> product) async {
+    final existingItemIndex = _cart.indexWhere((item) => item['id'] == product['id']);
+
+    if (existingItemIndex != -1) {
+      // Item already exists, so we safely increment its quantity.
+      final existingItem = _cart[existingItemIndex];
+      final currentQuantity = existingItem['quantity'] as int? ?? 0;
+      existingItem['quantity'] = currentQuantity + 1;
     } else {
-      final newProd = {
-        'id': id,
-        'name': product['Name'] ?? product['name'],
-        'price': (product['Price'] ?? product['price']) as num,
-        'image': product['Image'] ?? product['image'],
-        'quantity': (product['quantity'] ?? 1) as int,
+      // Item is new, add it to the list with quantity 1.
+      final newItem = {
+        ...product, // Copies all data from the product
+        'quantity': 1,  // Ensures quantity is always present
       };
-      _cart.add(newProd.cast<String, dynamic>());
+      _cart.add(newItem);
     }
+
+    // Notify listeners to update the UI
     notifyListeners();
+
+    // Sync the change with the database
+    await DatabaseMethods().addToCart(userId, product);
   }
 
   void updateQuantity(String productId, int delta) {
     final idx = _cart.indexWhere((it) => it['id'] == productId);
     if (idx != -1) {
-      final current = _cart[idx]['quantity'] as int;
+      final current = _cart[idx]['quantity'] as int? ?? 0;
       final updated = current + delta;
+
       if (updated <= 0) {
         _cart.removeAt(idx);
       } else {
@@ -49,11 +57,9 @@ class CartProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Adds an item back to the cart at a specific position.
-  /// This is required for the "remove item" rollback functionality.
   void addItemAt(int index, Map<String, dynamic> item) {
     if (index < 0 || index > _cart.length) {
-      _cart.add(item); // Add to end if index is invalid
+      _cart.add(item);
     } else {
       _cart.insert(index, item);
     }
@@ -62,13 +68,12 @@ class CartProvider extends ChangeNotifier {
 
   double getTotalPrice() {
     return _cart.fold<double>(0, (sum, item) {
-      final price = (item['price'] as num).toDouble();
-      final quantity = item['quantity'] as int;
-      return sum + price * quantity;
+      final price = (item['Price'] as num?)?.toDouble() ?? 0.0;
+      final quantity = (item['quantity'] as int?) ?? 0;
+      return sum + (price * quantity);
     });
   }
   
-  // Clears the cart and notifies listeners
   void clearCart() {
     _cart.clear();
     notifyListeners();

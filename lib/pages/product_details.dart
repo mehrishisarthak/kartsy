@@ -1,6 +1,5 @@
 import 'package:ecommerce_shop/services/cart_provider.dart';
 import 'package:ecommerce_shop/services/shared_preferences.dart';
-import 'package:ecommerce_shop/utils/database.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:ecommerce_shop/widget/support_widget.dart';
@@ -17,39 +16,41 @@ class ProductDetails extends StatefulWidget {
 class _ProductDetailsState extends State<ProductDetails> {
   bool _isLoading = false;
 
+  // ✅ FINAL, SIMPLIFIED & CORRECTED VERSION
   Future<void> _handleAddToCart() async {
-  setState(() => _isLoading = true);
+    setState(() => _isLoading = true);
 
-  try {
-    final userId = await SharedPreferenceHelper().getUserID();
+    try {
+      final userId = await SharedPreferenceHelper().getUserID();
+      if (userId == null || userId.isEmpty) {
+        throw Exception('User ID not found.');
+      }
 
-    if (userId == null || userId.isEmpty) {
-      throw Exception('User ID not found in SharedPreferences.');
+      // Let the provider handle EVERYTHING: local state and database call
+      // ignore: use_build_context_synchronously
+      await Provider.of<CartProvider>(context, listen: false)
+          .addToCart(userId, widget.productData);
+
+      // ignore: use_build_context_synchronously
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Product added to cart successfully!"),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 1),
+        ),
+      );
+    } catch (e) {
+      debugPrint("Error adding to cart: $e");
+      // ignore: use_build_context_synchronously
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error adding to cart: ${e.toString()}")),
+      );
+    } finally {
+      if(mounted) {
+        setState(() => _isLoading = false);
+      }
     }
-
-    await DatabaseMethods().addToCart(userId, widget.productData);
-    // ignore: use_build_context_synchronously
-    Provider.of<CartProvider>(context, listen: false).addProduct(widget.productData);
-
-    // ignore: use_build_context_synchronously
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Product added to cart successfully!"),
-        backgroundColor: Colors.green,
-        duration: Duration(seconds: 1),
-      ),
-    );
-  } catch (e) {
-    debugPrint("Error adding to cart: $e");
-    // ignore: use_build_context_synchronously
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Error: ${e.toString()}")),
-    );
-  } finally {
-    setState(() => _isLoading = false);
   }
-}
-
 
   @override
   Widget build(BuildContext context) {
@@ -165,15 +166,15 @@ class _ProductDetailsState extends State<ProductDetails> {
                       ),
                       const SizedBox(height: 10),
                       Text(
-                            '₹${product['Price'] ?? '--'}',
-                            style: AppWidget.boldTextStyle().copyWith(
-                              fontSize: 30,
-                              fontWeight: FontWeight.w900,
-                              color: Colors.blue,
-                            ),
-                          ),
-                          
-                          const SizedBox(height: 10),
+                        '₹${product['Price'] ?? '--'}',
+                        style: AppWidget.boldTextStyle().copyWith(
+                          fontSize: 30,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.blue,
+                        ),
+                      ),
+                      
+                      const SizedBox(height: 10),
 
                       // Details heading
                       Text(

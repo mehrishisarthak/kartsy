@@ -19,7 +19,6 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   // --- State Variables ---
   final Map<String, List<String>> indianStatesAndCities = {
-    // (Your comprehensive list of states and cities remains here)
     'Andaman and Nicobar Islands': ['Port Blair', 'Garacharma', 'Bambooflat'],
     'Andhra Pradesh': ['Visakhapatnam', 'Vijayawada', 'Guntur', 'Tirupati', 'Nellore', 'Kurnool', 'Rajahmundry', 'Kakinada', 'Anantapur', 'Eluru', 'Kadapa', 'Chittoor', 'Srikakulam'],
     'Arunachal Pradesh': ['Itanagar', 'Naharlagun', 'Tawang', 'Ziro', 'Bomdila', 'Pasighat'],
@@ -59,6 +58,7 @@ class _ProfilePageState extends State<ProfilePage> {
   };
 
   final SharedPreferenceHelper _prefs = SharedPreferenceHelper();
+  final FirebaseAuth _auth = FirebaseAuth.instance;
   Map<String, dynamic>? personData;
   File? _imageFile;
   bool _isLoading = false;
@@ -70,10 +70,22 @@ class _ProfilePageState extends State<ProfilePage> {
   final TextEditingController _pincodeController = TextEditingController();
   final TextEditingController _mobileController = TextEditingController();
 
+  // OTP and Phone Verification State
+  bool _isPhoneVerified = false;
+  String? _verificationId;
+  String _verifiedPhoneNumber = '';
+
   @override
   void initState() {
     super.initState();
     loadUserData();
+    _mobileController.addListener(() {
+      if (_isPhoneVerified && '+91${_mobileController.text.trim()}' != _verifiedPhoneNumber) {
+        setState(() {
+          _isPhoneVerified = false;
+        });
+      }
+    });
   }
 
   @override
@@ -101,7 +113,15 @@ class _ProfilePageState extends State<ProfilePage> {
               _selectedCity = address['city'];
               _localAddressController.text = address['local'] ?? '';
               _pincodeController.text = address['pincode'] ?? '';
-              _mobileController.text = (address['mobile'] ?? '').replaceFirst('+91', '');
+              final mobile = address['mobile'] ?? '';
+              _mobileController.text = mobile.replaceFirst('+91', '');
+
+              // Check if the stored number is verified
+              final currentUser = _auth.currentUser;
+              if (currentUser != null && currentUser.phoneNumber == mobile && mobile.isNotEmpty) {
+                _isPhoneVerified = true;
+                _verifiedPhoneNumber = mobile;
+              }
             }
           });
         }
@@ -129,32 +149,109 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  Future<void> _saveProfile() async {
-    // --- Temporarily disabled OTP check to allow progress on other features ---
-    // if (!_isPhoneVerified) {
-    //   _showErrorSnackBar("Please verify your phone number before saving.");
-    //   return;
-    // }
-
-    // --- Validation for all fields ---
+  Future<void> _verifyPhoneNumber() async {
     if (_mobileController.text.trim().length != 10) {
       _showErrorSnackBar("Please enter a valid 10-digit mobile number.");
       return;
     }
-    if (_selectedState == null) {
-      _showErrorSnackBar("Please select a state.");
+    
+    setState(() => _isLoading = true);
+
+    await _auth.verifyPhoneNumber(
+      phoneNumber: '+91${_mobileController.text.trim()}',
+      verificationCompleted: (PhoneAuthCredential credential) async {
+        try {
+          await _auth.currentUser?.linkWithCredential(credential);
+          if (mounted) {
+            setState(() {
+              _isPhoneVerified = true;
+              _verifiedPhoneNumber = '+91${_mobileController.text.trim()}';
+              _isLoading = false;
+            });
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Phone number verified automatically!"), backgroundColor: Colors.green));
+          }
+        } catch (e) {
+          if (mounted) {
+            setState(() => _isLoading = false);
+            _showErrorSnackBar("Failed to link credential: ${e.toString()}");
+          }
+        }
+      },
+      verificationFailed: (FirebaseAuthException e) {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          _showErrorSnackBar("Failed to verify phone number: ${e.message}");
+        }
+      },
+      codeSent: (String verificationId, int? resendToken) {
+        if (mounted) {
+          setState(() {
+            _verificationId = verificationId;
+            _isLoading = false;
+          });
+          _showOTPEntryDialog();
+        }
+      },
+      codeAutoRetrievalTimeout: (String verificationId) {
+        if (mounted) {
+          setState(() {
+            _verificationId = verificationId;
+          });
+        }
+      },
+    );
+  }
+
+  void _showOTPEntryDialog() {
+    final otpController = TextEditingController();
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text("Enter OTP"),
+        content: TextField(
+          controller: otpController,
+          keyboardType: TextInputType.number,
+          maxLength: 6,
+          decoration: const InputDecoration(hintText: "******"),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          ElevatedButton(
+            onPressed: () async {
+              if (_verificationId == null) return;
+              try {
+                PhoneAuthCredential credential = PhoneAuthProvider.credential(
+                  verificationId: _verificationId!,
+                  smsCode: otpController.text.trim(),
+                );
+                await _auth.currentUser?.linkWithCredential(credential);
+                if (mounted) {
+                  setState(() {
+                    _isPhoneVerified = true;
+                    _verifiedPhoneNumber = '+91${_mobileController.text.trim()}';
+                  });
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Phone number verified successfully!"), backgroundColor: Colors.green));
+                }
+              } catch (e) {
+                _showErrorSnackBar("Invalid OTP. Please try again.");
+              }
+            },
+            child: const Text("Submit"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _saveProfile() async {
+    if (!_isPhoneVerified) {
+      _showErrorSnackBar("Please verify your phone number before saving.");
       return;
     }
-    if (_selectedCity == null) {
-      _showErrorSnackBar("Please select a city.");
-      return;
-    }
-    if (_localAddressController.text.trim().isEmpty) {
-      _showErrorSnackBar("Please enter your local address.");
-      return;
-    }
-    if (_pincodeController.text.trim().length != 6) {
-      _showErrorSnackBar("Please enter a valid 6-digit pincode.");
+    if (_selectedState == null || _selectedCity == null || _localAddressController.text.trim().isEmpty || _pincodeController.text.trim().length != 6) {
+      _showErrorSnackBar("Please fill all address fields correctly.");
       return;
     }
     
@@ -179,8 +276,7 @@ class _ProfilePageState extends State<ProfilePage> {
         'city': _selectedCity,
         'local': _localAddressController.text.trim(),
         'pincode': _pincodeController.text.trim(),
-        // Save the number directly from the controller without verification
-        'mobile': '+91${_mobileController.text.trim()}',
+        'mobile': _verifiedPhoneNumber,
       };
 
       await FirebaseFirestore.instance.collection('users').doc(userID).update({'Address': structuredAddress, 'Image': imageUrl});
@@ -295,14 +391,29 @@ class _ProfilePageState extends State<ProfilePage> {
                       children: [
                         const Text("Contact & Address Info", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                         const SizedBox(height: 20),
-                        // --- Simplified Mobile Number Field ---
-                        _buildTextField(
+                        TextFormField(
                           controller: _mobileController,
-                          hintText: "98765 43210",
-                          icon: Icons.phone_android,
                           keyboardType: TextInputType.phone,
+                          readOnly: _isPhoneVerified,
                           inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(10)],
-                          prefixText: "+91 ",
+                          decoration: InputDecoration(
+                            hintText: "98765 43210",
+                            prefixIcon: const Icon(Icons.phone_android, color: Colors.blue),
+                            prefixText: "+91 ",
+                            prefixStyle: const TextStyle(fontSize: 16, color: Colors.black87),
+                            filled: true,
+                            fillColor: _isPhoneVerified ? Colors.grey.shade200 : Colors.white,
+                            suffixIcon: TextButton(
+                              onPressed: _isPhoneVerified ? null : _verifyPhoneNumber,
+                              child: _isLoading
+                                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                                : _isPhoneVerified 
+                                  ? const Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.check_circle, color: Colors.green), SizedBox(width: 4), Text("Verified")])
+                                  : const Text("Verify", style: TextStyle(color: Colors.blue)),
+                            ),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                            enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey.shade300, width: 1.5), borderRadius: BorderRadius.circular(12)),
+                          ),
                         ),
                         const SizedBox(height: 16),
                         _buildDropdown(
