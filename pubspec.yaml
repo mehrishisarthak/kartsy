@@ -15,16 +15,17 @@ dependencies:
   firebase_auth: ^5.6.0
   firebase_core: ^3.14.0
   firebase_storage: ^12.4.7
-  intl: ^0.19.0
   flutter:
     sdk: flutter
   google_fonts: ^6.2.1
   google_sign_in: ^6.2.1
   image_picker: ^1.1.2
+  intl: ^0.19.0
   lottie: ^3.3.1
   provider: ^6.1.5
   random_string: ^2.3.1
   shared_preferences: ^2.5.3
+  shimmer: ^3.0.0
 
 dev_dependencies:
   flutter_launcher_icons: ^0.14.4
@@ -46,6 +47,7 @@ flutter:
     - images/listings/headphone.png
     - images/login.json
     - images/emptyCart.json
+    - images/error.json
     - images/admin.gif
     - lib/assets/images/default_profile.png
     - lib/assets/images/app_icon.png

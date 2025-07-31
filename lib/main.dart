@@ -4,6 +4,7 @@ import 'package:ecommerce_shop/services/cart_provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_app_check/firebase_app_check.dart'; // 1. Add this import
 import 'package:flutter/material.dart';
+import 'package:lottie/lottie.dart';
 import 'package:provider/provider.dart';
 
 void main() async {
@@ -30,7 +31,6 @@ void main() async {
       ),
     );
   } catch (e) {
-    print("❌ Firebase initialization failed: $e");
     runApp(const FirebaseErrorApp());
   }
 }
@@ -57,15 +57,22 @@ class FirebaseErrorApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
       debugShowCheckedModeBanner: false,
       home: Scaffold(
         backgroundColor: Colors.white,
         body: Center(
-          child: Text(
-            '🔥 Firebase failed to initialize.\nPlease check your configuration.',
-            style: TextStyle(fontSize: 16, color: Colors.red),
-            textAlign: TextAlign.center,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Lottie.asset('images/error.json', width: 200, height: 200),
+              SizedBox(height: 20),
+              Text(
+                'Server Initialization Failed',
+                style: TextStyle(fontSize: 24, color: Colors.red),
+                textAlign: TextAlign.center,
+              ),
+            ],
           ),
         ),
       ),

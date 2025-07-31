@@ -1,10 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ecommerce_shop/pages/category_products.dart';
 import 'package:ecommerce_shop/pages/discover_page.dart';
-import 'package:ecommerce_shop/pages/product_details.dart';
 import 'package:ecommerce_shop/pages/profile.dart';
 import 'package:ecommerce_shop/services/cart_provider.dart';
 import 'package:ecommerce_shop/services/shared_preferences.dart';
+import 'package:ecommerce_shop/services/stream_builders/horizontal_stream_builder.dart';
 import 'package:ecommerce_shop/widget/support_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -34,15 +34,13 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    // Use a single initialization function to avoid race conditions
     _initializeData();
   }
 
-  /// A single, safe initialization function to load all necessary data.
+  /// A single, safe function to load all necessary data when the screen starts.
   Future<void> _initializeData() async {
-    final prefs = SharedPreferenceHelper();
-    uid = await prefs.getUserID();
-    
+    uid = await SharedPreferenceHelper().getUserID();
+
     if (uid != null) {
       // Run both data loading operations concurrently for speed
       await Future.wait([
@@ -50,7 +48,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _loadCartData(uid!),
       ]);
     }
-    
+
     if (mounted) {
       setState(() {
         _isLoading = false;
@@ -58,7 +56,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// Load cart data from Firestore and sync with the local CartProvider.
+  /// Loads the user's cart from Firestore and syncs it with the local provider.
   Future<void> _loadCartData(String userId) async {
     try {
       final cartSnap = await FirebaseFirestore.instance
@@ -69,35 +67,32 @@ class _HomeScreenState extends State<HomeScreen> {
 
       final cartItems = cartSnap.docs.map((doc) {
         final data = doc.data();
-        // ✅ FIX: Added the missing 'adminId' and 'category' fields to ensure all necessary data is synced.
         return {
           'id': doc.id,
-          'Name': data['Name'] ?? 'Unnamed', // Using consistent 'Name' key
-          'Price': (data['Price'] as num?)?.toDouble() ?? 0.0, // Using consistent 'Price' key
+          'Name': data['Name'] ?? 'Unnamed Product',
+          'Price': (data['Price'] as num?)?.toDouble() ?? 0.0,
           'quantity': (data['quantity'] as int?) ?? 1,
-          'Image': data['Image'] ?? '', // Using consistent 'Image' key
-          'adminId': data['adminId'], // Added adminId
-          'category': data['category'], // Added category
+          'Image': data['Image'] ?? '',
+          'adminId': data['adminId'],
+          'category': data['category'],
         };
       }).toList();
 
       if (mounted) {
-        final cartProvider = Provider.of<CartProvider>(context, listen: false);
-        cartProvider.setCart(cartItems);
+        Provider.of<CartProvider>(context, listen: false).setCart(cartItems);
       }
     } catch (e) {
       print("Error loading cart data: $e");
-      // Optionally show a snackbar for cart loading errors
     }
   }
 
-  /// Load user's name and profile image URL.
+  /// Loads user's name and profile image URL.
   Future<void> _loadUserData(String userId) async {
     final prefs = SharedPreferenceHelper();
     final name = await prefs.getUserName();
 
     if (name != null && name.trim().isNotEmpty) {
-      userName = name.trim().split(' ')[0];
+      userName = name.trim().split(' ')[0]; // Show first name
     }
 
     try {
@@ -123,7 +118,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Top greeting + profile pic
+                      // --- Top greeting + profile pic ---
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -164,7 +159,6 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ],
                       ),
-
                       const SizedBox(height: 20.0),
                       Text('What are you looking for?', style: AppWidget.lightTextStyle()),
                       const SizedBox(height: 10),
@@ -240,7 +234,6 @@ class _HomeScreenState extends State<HomeScreen> {
                           },
                         ),
                       ),
-
                       const SizedBox(height: 30.0),
                       // --- Featured Products Section ---
                       Row(
@@ -265,110 +258,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                       const SizedBox(height: 20.0),
-                      SizedBox(
-                        height: 260,
-                        child: StreamBuilder<QuerySnapshot>(
-                          stream: FirebaseFirestore.instance.collection('products').snapshots(),
-                          builder: (context, snapshot) {
-                            if (snapshot.connectionState == ConnectionState.waiting) {
-                              return const Center(child: CircularProgressIndicator());
-                            }
-                            if (snapshot.hasError) {
-                              return const Center(child: Text("Something went wrong"));
-                            }
-
-                            final products = snapshot.data?.docs ?? [];
-                            if (products.isEmpty) {
-                              return const Center(child: Text("No products found"));
-                            }
-
-                            return ListView.separated(
-                              scrollDirection: Axis.horizontal,
-                              itemCount: products.length,
-                              separatorBuilder: (_, __) => const SizedBox(width: 12),
-                              itemBuilder: (context, index) {
-                                final productDoc = products[index];
-                                final productData = productDoc.data() as Map<String, dynamic>;
-                                
-                                // Create a complete product map to pass to the details page
-                                final completeProductData = {
-                                  ...productData,
-                                  'id': productDoc.id, // Ensure the document ID is included
-                                };
-                                
-                                final name = completeProductData['Name'] ?? 'Product';
-                                final price = completeProductData['Price'] ?? '--';
-                                final image = completeProductData['Image'] ?? '';
-
-                                return GestureDetector(
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => ProductDetails(productData: completeProductData),
-                                      ),
-                                    );
-                                  },
-                                  child: Container(
-                                    width: 160,
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      border: Border.all(color: Colors.blue.shade200, width: 1.5),
-                                      borderRadius: BorderRadius.circular(10),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.grey.withOpacity(0.1),
-                                          spreadRadius: 1,
-                                          blurRadius: 5,
-                                        )
-                                      ]
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        if (image.isNotEmpty)
-                                          ClipRRect(
-                                            borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-                                            child: Image.network(
-                                              image,
-                                              height: 140,
-                                              width: double.infinity,
-                                              fit: BoxFit.cover,
-                                              errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, size: 80),
-                                            ),
-                                          ),
-                                        const Spacer(),
-                                        Padding(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                                          child: Text(
-                                            name,
-                                            style: AppWidget.boldTextStyle().copyWith(fontSize: 16),
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                        const Spacer(),
-                                        Padding(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                                          child: Text(
-                                            '₹$price',
-                                            style: AppWidget.lightTextStyle().copyWith(
-                                              color: Colors.blue,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 17,
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 8),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              },
-                            );
-                          },
-                        ),
-                      ),
+                      HorizontalProductsList(stream: FirebaseFirestore.instance.collection('products').snapshots()),
                     ],
                   ),
                 ),
