@@ -22,8 +22,8 @@ class _HomeScreenState extends State<HomeScreen> {
   String userImageUrl = '';
   bool _isLoading = true;
 
-  // Data-driven approach for categories for better scalability
-  final List<Map<String, String>> categories = [
+  // Made static const for memory efficiency (compile-time constant)
+  static const List<Map<String, String>> categories = [
     {'name': 'All', 'image': ''},
     {'name': 'Headphones', 'image': 'images/products/headphone.png'},
     {'name': 'Laptop', 'image': 'images/products/laptop.png'},
@@ -82,6 +82,7 @@ class _HomeScreenState extends State<HomeScreen> {
         Provider.of<CartProvider>(context, listen: false).setCart(cartItems);
       }
     } catch (e) {
+      // ignore: avoid_print
       print("Error loading cart data: $e");
     }
   }
@@ -96,11 +97,13 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     try {
-      final userDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
+      final userDoc =
+          await FirebaseFirestore.instance.collection('users').doc(userId).get();
       if (userDoc.exists) {
         userImageUrl = userDoc['Image'] ?? '';
       }
     } catch (e) {
+      // ignore: avoid_print
       print("Error loading user image: $e");
     }
   }
@@ -114,7 +117,8 @@ class _HomeScreenState extends State<HomeScreen> {
           : SafeArea(
               child: SingleChildScrollView(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 20.0, vertical: 16.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -125,15 +129,18 @@ class _HomeScreenState extends State<HomeScreen> {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Hey, $userName!', style: AppWidget.boldTextStyle()),
-                              Text('Good day!', style: AppWidget.lightTextStyle()),
+                              Text('Hey, $userName!',
+                                  style: AppWidget.boldTextStyle()),
+                              Text('Good day!',
+                                  style: AppWidget.lightTextStyle()),
                             ],
                           ),
                           GestureDetector(
                             onTap: () {
                               Navigator.push(
                                 context,
-                                MaterialPageRoute(builder: (_) => const ProfilePage()),
+                                MaterialPageRoute(
+                                    builder: (_) => const ProfilePage()),
                               );
                             },
                             child: Container(
@@ -148,7 +155,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                         height: 50,
                                         width: 50,
                                         fit: BoxFit.cover,
-                                        errorBuilder: (_, __, ___) => const Icon(Icons.person, size: 30),
+                                        errorBuilder: (_, __, ___) =>
+                                            const Icon(Icons.person, size: 30),
                                       )
                                     : const CircleAvatar(
                                         radius: 25,
@@ -160,7 +168,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                       const SizedBox(height: 20.0),
-                      Text('What are you looking for?', style: AppWidget.lightTextStyle()),
+                      Text('What are you looking for?',
+                          style: AppWidget.lightTextStyle()),
                       const SizedBox(height: 10),
                       // --- Search TextField ---
                       TextField(
@@ -179,7 +188,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(20.0),
-                            borderSide: const BorderSide(color: Colors.blue, width: 2.0),
+                            borderSide:
+                                const BorderSide(color: Colors.blue, width: 2.0),
                           ),
                         ),
                       ),
@@ -204,7 +214,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (context) => CategoryProducts(category: categoryName),
+                                    builder: (context) =>
+                                        CategoryProducts(category: categoryName),
                                   ),
                                 );
                               },
@@ -212,21 +223,27 @@ class _HomeScreenState extends State<HomeScreen> {
                                 width: 100,
                                 decoration: BoxDecoration(
                                   color: isAll ? Colors.blue : Colors.transparent,
-                                  border: Border.all(color: Colors.blue, width: 2),
+                                  border:
+                                      Border.all(color: Colors.blue, width: 2),
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: isAll
                                     ? Center(
                                         child: Text(
                                           'All',
-                                          style: AppWidget.boldTextStyle().copyWith(color: Colors.white, fontSize: 18),
+                                          style: AppWidget.boldTextStyle()
+                                              .copyWith(
+                                                  color: Colors.white,
+                                                  fontSize: 18),
                                         ),
                                       )
                                     : ClipRRect(
                                         borderRadius: BorderRadius.circular(8),
                                         child: Padding(
                                           padding: const EdgeInsets.all(8.0),
-                                          child: Image.asset(categoryItem['image']!, fit: BoxFit.contain),
+                                          child: Image.asset(
+                                              categoryItem['image']!,
+                                              fit: BoxFit.contain),
                                         ),
                                       ),
                               ),
@@ -239,12 +256,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text('Featured Products', style: AppWidget.boldTextStyle()),
+                          Text('Featured Products',
+                              style: AppWidget.boldTextStyle()),
                           GestureDetector(
                             onTap: () {
                               Navigator.push(
                                 context,
-                                MaterialPageRoute(builder: (context) => const DiscoverPage()),
+                                MaterialPageRoute(
+                                    builder: (context) => const DiscoverPage()),
                               );
                             },
                             child: Text(
@@ -258,7 +277,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                       const SizedBox(height: 20.0),
-                      HorizontalProductsList(stream: FirebaseFirestore.instance.collection('products').snapshots()),
+                      HorizontalProductsList(
+                          stream: FirebaseFirestore.instance
+                              .collection('products')
+                              .snapshots()),
                     ],
                   ),
                 ),

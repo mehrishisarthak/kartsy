@@ -33,9 +33,8 @@ class _SignupPageState extends State<SignupPage> {
     _emailController = TextEditingController();
     _passwordController = TextEditingController();
     _isPasswordVisible = false; // Initially, password is not visible
-
-    // It's good practice to not clear user info here unless you have a specific reason.
-    // Let's assume this is intended for now.
+    // Clear any previous user info from shared preferences
+    // This is important to ensure a fresh start for the signup process.
     SharedPreferenceHelper().clearUserInfo();
   }
 
@@ -151,12 +150,12 @@ class _SignupPageState extends State<SignupPage> {
     return Scaffold(
       // Use a container with a gradient for a more modern background
       body: Container(
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Colors.lightBlue.shade50,
+              Color(0xFFE3F2FD), // A lighter shade of blue
               Colors.white,
               Colors.white,
             ],
@@ -387,7 +386,7 @@ class _SignupPageState extends State<SignupPage> {
     return SizedBox(
       height: 55,
       child: OutlinedButton.icon(
-        onPressed: _isLoading ? null : _handleGoogleSignup, // ⭐️ UPDATED
+        onPressed: _isLoading ? null : _handleGoogleSignup,
         icon: Image.asset(
           'images/icons/google.png', // Ensure this path is correct
           height: 24.0,

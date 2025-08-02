@@ -18,7 +18,8 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   // --- State Variables ---
-  final Map<String, List<String>> indianStatesAndCities = {
+  // Made static const for memory efficiency (compile-time constant)
+  static const Map<String, List<String>> indianStatesAndCities = {
     'Andaman and Nicobar Islands': ['Port Blair', 'Garacharma', 'Bambooflat'],
     'Andhra Pradesh': ['Visakhapatnam', 'Vijayawada', 'Guntur', 'Tirupati', 'Nellore', 'Kurnool', 'Rajahmundry', 'Kakinada', 'Anantapur', 'Eluru', 'Kadapa', 'Chittoor', 'Srikakulam'],
     'Arunachal Pradesh': ['Itanagar', 'Naharlagun', 'Tawang', 'Ziro', 'Bomdila', 'Pasighat'],
@@ -96,40 +97,56 @@ class _ProfilePageState extends State<ProfilePage> {
     super.dispose();
   }
 
+  /// Loads user data, prioritizing local cache before fetching from Firestore.
   Future<void> loadUserData() async {
     try {
+      // Attempt to load from SharedPreferences first for a faster UI response
+      final cachedAddress = await _prefs.getUserAddress();
+      if (cachedAddress != null && mounted) {
+        _updateAddressFields(cachedAddress);
+      }
+
       final userID = await _prefs.getUserID();
       if (userID != null) {
         final doc = await FirebaseFirestore.instance.collection('users').doc(userID).get();
         if (doc.exists && mounted) {
+          final firestoreData = doc.data()!;
           setState(() {
-            personData = doc.data();
-            final address = personData?['Address'];
-            if (address is Map<String, dynamic>) {
-              _selectedState = address['state'];
-              if (_selectedState != null) {
-                _cities = indianStatesAndCities[_selectedState] ?? [];
-              }
-              _selectedCity = address['city'];
-              _localAddressController.text = address['local'] ?? '';
-              _pincodeController.text = address['pincode'] ?? '';
-              final mobile = address['mobile'] ?? '';
-              _mobileController.text = mobile.replaceFirst('+91', '');
-
-              // Check if the stored number is verified
-              final currentUser = _auth.currentUser;
-              if (currentUser != null && currentUser.phoneNumber == mobile && mobile.isNotEmpty) {
-                _isPhoneVerified = true;
-                _verifiedPhoneNumber = mobile;
-              }
-            }
+            personData = firestoreData;
           });
+          final address = firestoreData['Address'];
+          if (address is Map<String, dynamic>) {
+            _updateAddressFields(address);
+          }
         }
       }
     } catch (e) {
+      // ignore: avoid_print
       print("Error loading user data: $e");
       if (mounted) _showErrorSnackBar("Failed to load user data");
     }
+  }
+
+  /// Helper to update state and controllers from an address map.
+  void _updateAddressFields(Map<String, dynamic> address) {
+    setState(() {
+      _selectedState = address['state'];
+      if (_selectedState != null) {
+        _cities = indianStatesAndCities[_selectedState] ?? [];
+      }
+      _selectedCity = address['city'];
+      _localAddressController.text = address['local'] ?? '';
+      _pincodeController.text = address['pincode'] ?? '';
+      final mobile = address['mobile'] ?? '';
+      _mobileController.text = mobile.replaceFirst('+91', '');
+
+      // Check if the stored number is verified
+      final currentUser = _auth.currentUser;
+      if (currentUser != null && currentUser.phoneNumber == mobile && mobile.isNotEmpty) {
+        _isPhoneVerified = true;
+        _verifiedPhoneNumber = mobile;
+      }
+    });
   }
 
   Future<void> _pickImage() async {
@@ -149,6 +166,7 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  /// Checks if a phone number is already in use before sending an OTP.
   Future<void> _verifyPhoneNumber() async {
     if (_mobileController.text.trim().length != 10) {
       _showErrorSnackBar("Please enter a valid 10-digit mobile number.");
@@ -157,49 +175,69 @@ class _ProfilePageState extends State<ProfilePage> {
     
     setState(() => _isLoading = true);
 
-    await _auth.verifyPhoneNumber(
-      phoneNumber: '+91${_mobileController.text.trim()}',
-      verificationCompleted: (PhoneAuthCredential credential) async {
-        try {
-          await _auth.currentUser?.linkWithCredential(credential);
+    try {
+      final phoneNumber = '+91${_mobileController.text.trim()}';
+      final currentUser = _auth.currentUser;
+
+      // --- Check if phone number already exists ---
+      final querySnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .where('Address.mobile', isEqualTo: phoneNumber)
+          .limit(1)
+          .get();
+
+      if (querySnapshot.docs.isNotEmpty && querySnapshot.docs.first.id != currentUser?.uid) {
+        _showErrorSnackBar("Phone number is already in use by another account.");
+        return;
+      }
+      // --- End of check ---
+
+      await _auth.verifyPhoneNumber(
+        phoneNumber: phoneNumber,
+        verificationCompleted: (PhoneAuthCredential credential) async {
+          try {
+            await _auth.currentUser?.linkWithCredential(credential);
+            if (mounted) {
+              setState(() {
+                _isPhoneVerified = true;
+                _verifiedPhoneNumber = phoneNumber;
+              });
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Phone number verified automatically!"), backgroundColor: Colors.green));
+            }
+          } catch (e) {
+            if (mounted) {
+              _showErrorSnackBar("Failed to link credential: ${e.toString()}");
+            }
+          } finally {
+             if (mounted) setState(() => _isLoading = false);
+          }
+        },
+        verificationFailed: (FirebaseAuthException e) {
+          if (mounted) {
+            _showErrorSnackBar("Failed to verify phone number: ${e.message}");
+          }
+        },
+        codeSent: (String verificationId, int? resendToken) {
           if (mounted) {
             setState(() {
-              _isPhoneVerified = true;
-              _verifiedPhoneNumber = '+91${_mobileController.text.trim()}';
-              _isLoading = false;
+              _verificationId = verificationId;
             });
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Phone number verified automatically!"), backgroundColor: Colors.green));
+            _showOTPEntryDialog();
           }
-        } catch (e) {
+        },
+        codeAutoRetrievalTimeout: (String verificationId) {
           if (mounted) {
-            setState(() => _isLoading = false);
-            _showErrorSnackBar("Failed to link credential: ${e.toString()}");
+            setState(() {
+              _verificationId = verificationId;
+            });
           }
-        }
-      },
-      verificationFailed: (FirebaseAuthException e) {
-        if (mounted) {
-          setState(() => _isLoading = false);
-          _showErrorSnackBar("Failed to verify phone number: ${e.message}");
-        }
-      },
-      codeSent: (String verificationId, int? resendToken) {
-        if (mounted) {
-          setState(() {
-            _verificationId = verificationId;
-            _isLoading = false;
-          });
-          _showOTPEntryDialog();
-        }
-      },
-      codeAutoRetrievalTimeout: (String verificationId) {
-        if (mounted) {
-          setState(() {
-            _verificationId = verificationId;
-          });
-        }
-      },
-    );
+        },
+      );
+    } catch (e) {
+        if (mounted) _showErrorSnackBar("An error occurred. Please try again.");
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   void _showOTPEntryDialog() {
@@ -245,6 +283,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  /// Saves the profile to Firestore and caches the address locally.
   Future<void> _saveProfile() async {
     if (!_isPhoneVerified) {
       _showErrorSnackBar("Please verify your phone number before saving.");
@@ -279,8 +318,12 @@ class _ProfilePageState extends State<ProfilePage> {
         'mobile': _verifiedPhoneNumber,
       };
 
-      await FirebaseFirestore.instance.collection('users').doc(userID).update({'Address': structuredAddress, 'Image': imageUrl});
-
+      // Perform saves concurrently
+      await Future.wait([
+        FirebaseFirestore.instance.collection('users').doc(userID).update({'Address': structuredAddress, 'Image': imageUrl}),
+        _prefs.saveUserAddress(structuredAddress), // Save address to SharedPreferences
+      ]);
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile updated successfully!'), backgroundColor: Colors.green));
       }
@@ -406,10 +449,10 @@ class _ProfilePageState extends State<ProfilePage> {
                             suffixIcon: TextButton(
                               onPressed: _isPhoneVerified ? null : _verifyPhoneNumber,
                               child: _isLoading
-                                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                                : _isPhoneVerified 
-                                  ? const Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.check_circle, color: Colors.green), SizedBox(width: 4), Text("Verified")])
-                                  : const Text("Verify", style: TextStyle(color: Colors.blue)),
+                                  ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                                  : _isPhoneVerified 
+                                    ? const Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.check_circle, color: Colors.green), SizedBox(width: 4), Text("Verified")])
+                                    : const Text("Verify", style: TextStyle(color: Colors.blue)),
                             ),
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                             enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey.shade300, width: 1.5), borderRadius: BorderRadius.circular(12)),

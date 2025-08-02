@@ -16,7 +16,7 @@ class ProductDetails extends StatefulWidget {
 class _ProductDetailsState extends State<ProductDetails> {
   bool _isLoading = false;
 
-  // ✅ FINAL, SIMPLIFIED & CORRECTED VERSION
+  /// Handles adding the product to the cart, managed by the CartProvider.
   Future<void> _handleAddToCart() async {
     setState(() => _isLoading = true);
 
@@ -26,7 +26,7 @@ class _ProductDetailsState extends State<ProductDetails> {
         throw Exception('User ID not found.');
       }
 
-      // Let the provider handle EVERYTHING: local state and database call
+      // Let the provider handle both local state and database operations
       // ignore: use_build_context_synchronously
       await Provider.of<CartProvider>(context, listen: false)
           .addToCart(userId, widget.productData);
@@ -46,7 +46,7 @@ class _ProductDetailsState extends State<ProductDetails> {
         SnackBar(content: Text("Error adding to cart: ${e.toString()}")),
       );
     } finally {
-      if(mounted) {
+      if (mounted) {
         setState(() => _isLoading = false);
       }
     }
@@ -59,7 +59,7 @@ class _ProductDetailsState extends State<ProductDetails> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FB),
 
-      // AppBar
+      // --- AppBar ---
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(80),
         child: Container(
@@ -95,14 +95,14 @@ class _ProductDetailsState extends State<ProductDetails> {
                           fontSize: 30,
                           color: Colors.blue,
                           fontFamily: 'Lato',
-                          fontWeight: FontWeight.w900
+                          fontWeight: FontWeight.w900,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ),
-                  const SizedBox(width: 48),
+                  const SizedBox(width: 48), // To balance the back button space
                 ],
               ),
             ),
@@ -110,7 +110,7 @@ class _ProductDetailsState extends State<ProductDetails> {
         ),
       ),
 
-      // Body
+      // --- Body ---
       body: Column(
         children: [
           const SizedBox(height: 20),
@@ -148,23 +148,17 @@ class _ProductDetailsState extends State<ProductDetails> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Title & Price
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              product['Name'] ?? '',
-                              style: AppWidget.boldTextStyle().copyWith(
-                                fontSize: 28,
-                                color: Colors.black87,
-                              ),
-                              softWrap: true,
-                            ),
-                          ),
-                        ],
+                      // Title
+                      Text(
+                        product['Name'] ?? 'No Name',
+                        style: AppWidget.boldTextStyle().copyWith(
+                          fontSize: 28,
+                          color: Colors.black87,
+                        ),
+                        softWrap: true,
                       ),
                       const SizedBox(height: 10),
+                      // Price
                       Text(
                         '₹${product['Price'] ?? '--'}',
                         style: AppWidget.boldTextStyle().copyWith(
@@ -173,9 +167,7 @@ class _ProductDetailsState extends State<ProductDetails> {
                           color: Colors.blue,
                         ),
                       ),
-                      
                       const SizedBox(height: 10),
-
                       // Details heading
                       Text(
                         'Details',
@@ -185,7 +177,6 @@ class _ProductDetailsState extends State<ProductDetails> {
                         ),
                       ),
                       const SizedBox(height: 10),
-
                       // Description
                       Text(
                         product['Description'] ??
@@ -205,7 +196,7 @@ class _ProductDetailsState extends State<ProductDetails> {
         ],
       ),
 
-      // Bottom Button
+      // --- Bottom Button ---
       bottomNavigationBar: Container(
         padding: const EdgeInsets.all(20),
         decoration: const BoxDecoration(

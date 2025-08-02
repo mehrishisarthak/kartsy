@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SharedPreferenceHelper {
@@ -5,6 +6,7 @@ class SharedPreferenceHelper {
   static String userNamekey = "USERNAMEKEY";
   static String userEmailkey = "USEREMAILKEY";
   static String userImagekey = "USERIMAGEKEY";
+  static String userAddressKey = "USERADDRESSKEY"; // New key for the address
 
   Future<bool> saveUserId(String getUserID) async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -24,6 +26,13 @@ class SharedPreferenceHelper {
   Future<bool> saveUserImage(String getUserImage) async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     return await prefs.setString(userImagekey, getUserImage);
+  }
+
+  /// Encodes a Map to a JSON string and saves it.
+  Future<bool> saveUserAddress(Map<String, dynamic> address) async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    String addressJson = json.encode(address);
+    return await prefs.setString(userAddressKey, addressJson);
   }
 
   Future<String?> getUserID() async {
@@ -46,12 +55,23 @@ class SharedPreferenceHelper {
     return prefs.getString(userImagekey);
   }
 
-  /// ✅ Clears all saved user data from SharedPreferences
+  /// Retrieves the JSON string and decodes it back to a Map.
+  Future<Map<String, dynamic>?> getUserAddress() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    String? addressJson = prefs.getString(userAddressKey);
+    if (addressJson != null) {
+      return json.decode(addressJson) as Map<String, dynamic>;
+    }
+    return null;
+  }
+
+  /// Clears all saved user data from SharedPreferences.
   Future<void> clearUserInfo() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.remove(userIdkey);
     await prefs.remove(userNamekey);
     await prefs.remove(userEmailkey);
     await prefs.remove(userImagekey);
+    await prefs.remove(userAddressKey); // Also clear the address
   }
 }

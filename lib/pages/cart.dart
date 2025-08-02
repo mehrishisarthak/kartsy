@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:ecommerce_shop/pages/profile.dart';
 import 'package:ecommerce_shop/services/cart_provider.dart';
 import 'package:ecommerce_shop/services/shared_preferences.dart';
 import 'package:ecommerce_shop/utils/database.dart';
@@ -54,10 +55,7 @@ class _CartPageState extends State<CartPage> {
     }
   }
 
-  /// ✅ FIX: Handles quantity updates with a Firestore Transaction.
-  /// This is the safest way to prevent race conditions. It reads the
-  /// current quantity from the database *then* writes the new value
-  /// in one single, unbreakable operation.
+  /// Handles quantity updates with a Firestore Transaction.
   Future<void> updateItemQuantity(String itemId, int delta) async {
     if (userID == null) return;
 
@@ -69,6 +67,7 @@ class _CartPageState extends State<CartPage> {
         final docSnapshot = await transaction.get(docRef);
 
         if (!docSnapshot.exists) {
+          // ignore: avoid_print
           print("Item document does not exist, cannot update.");
           return;
         }
@@ -99,6 +98,7 @@ class _CartPageState extends State<CartPage> {
       }
     } catch (e) {
       if (mounted) _showSnackBar('Could not update item.', isError: true);
+      // ignore: avoid_print
       print("Error during transaction: $e");
     }
   }
@@ -125,7 +125,7 @@ class _CartPageState extends State<CartPage> {
     }
   }
 
-  /// Handles placing the final order.
+  /// Handles placing the final order after validating the user's address.
   Future<void> _handlePlaceOrder() async {
     if (userID == null) {
       _showSnackBar("Please log in to place an order.", isError: true);
@@ -135,6 +135,22 @@ class _CartPageState extends State<CartPage> {
     final cartProvider = Provider.of<CartProvider>(context, listen: false);
     if (cartProvider.cart.isEmpty) {
       _showSnackBar("Your cart is empty.", isError: true);
+      return;
+    }
+
+    // --- Address Validation ---
+    final prefs = SharedPreferenceHelper();
+    final address = await prefs.getUserAddress();
+
+    if (address == null ||
+        address['state'] == null ||
+        address['city'] == null ||
+        (address['local'] == null || (address['local'] as String).isEmpty) ||
+        (address['pincode'] == null || (address['pincode'] as String).isEmpty) ||
+        (address['mobile'] == null || (address['mobile'] as String).isEmpty)) {
+      _showSnackBar("Please complete your profile address first.", isError: true);
+      // ignore: use_build_context_synchronously
+      Navigator.of(context).push(MaterialPageRoute(builder: (context) => const ProfilePage()));
       return;
     }
 

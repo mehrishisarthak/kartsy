@@ -1,4 +1,3 @@
-import 'package:curved_navigation_bar/curved_navigation_bar.dart';
 import 'package:ecommerce_shop/pages/home.dart';
 import 'package:ecommerce_shop/pages/cart.dart';
 import 'package:ecommerce_shop/services/shared_preferences.dart';
@@ -16,8 +15,7 @@ class _BottomBarState extends State<BottomBar> {
   String? userId;
   bool isLoading = true;
 
-  // 1. Define the pages list here, outside the build method.
-  // This ensures the page widgets are created only once.
+  // The list of pages is defined once to preserve state.
   final List<Widget> pages = [
     const HomeScreen(),
     const CartPage(),
@@ -48,26 +46,36 @@ class _BottomBarState extends State<BottomBar> {
     }
 
     return Scaffold(
-      // 2. Use IndexedStack as the body.
-      // It keeps all pages in the widget tree, preserving their state.
+      // IndexedStack keeps all pages in the widget tree, preserving their state.
       body: IndexedStack(
         index: currentIndex,
         children: pages,
       ),
-      bottomNavigationBar: CurvedNavigationBar(
-        backgroundColor: Colors.transparent, // Often looks better with IndexedStack
-        color: Colors.blue,
-        buttonBackgroundColor: Colors.blue,
-        height: 60,
-        index: currentIndex,
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: currentIndex,
         onTap: (index) {
           setState(() {
             currentIndex = index;
           });
         },
+        type: BottomNavigationBarType.fixed, // Ensures background color is applied
+        backgroundColor: Colors.white,
+        selectedItemColor: Colors.blue,
+        unselectedItemColor: Colors.grey[600],
+        selectedFontSize: 14,
+        unselectedFontSize: 12,
+        elevation: 10,
         items: const [
-          Icon(Icons.home_outlined, size: 30, color: Colors.white),
-          Icon(Icons.shopping_cart_outlined, size: 30, color: Colors.white),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home_outlined),
+            activeIcon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.shopping_cart_outlined),
+            activeIcon: Icon(Icons.shopping_cart),
+            label: 'Cart',
+          ),
         ],
       ),
     );
