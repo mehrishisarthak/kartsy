@@ -72,7 +72,7 @@ class SettingsPage extends StatelessWidget {
             const Spacer(),
             SizedBox(
               width: double.infinity,
-              height: 50,
+              height: 60,
               child: ElevatedButton.icon(
                 icon: const Icon(Icons.logout),
                 label: const Text('Logout'),
