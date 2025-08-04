@@ -5,7 +5,6 @@ import 'package:ecommerce_shop/pages/profile.dart';
 import 'package:ecommerce_shop/services/cart_provider.dart';
 import 'package:ecommerce_shop/services/shared_preferences.dart';
 import 'package:ecommerce_shop/services/stream_builders/horizontal_stream_builder.dart';
-import 'package:ecommerce_shop/widget/support_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -41,7 +40,6 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _initializeData() async {
     uid = await SharedPreferenceHelper().getUserID();
     
-
     if (uid != null) {
       // Run both data loading operations concurrently for speed
       await Future.wait([
@@ -111,8 +109,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+
     return Scaffold(
-      backgroundColor: Colors.white,
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SafeArea(
@@ -131,9 +132,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text('Hey, $userName!',
-                                  style: AppWidget.boldTextStyle()),
+                                  style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
                               Text('Good day!',
-                                  style: AppWidget.lightTextStyle()),
+                                  style: textTheme.titleMedium?.copyWith(color: Colors.grey[600])),
                             ],
                           ),
                           GestureDetector(
@@ -146,7 +147,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             },
                             child: Container(
                               decoration: BoxDecoration(
-                                border: Border.all(color: Colors.blue, width: 2),
+                                border: Border.all(color: colorScheme.primary, width: 2),
                                 shape: BoxShape.circle,
                               ),
                               child: ClipOval(
@@ -159,9 +160,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                         errorBuilder: (_, __, ___) =>
                                             const Icon(Icons.person, size: 30),
                                       )
-                                    : const CircleAvatar(
+                                    : CircleAvatar(
                                         radius: 25,
-                                        child: Icon(Icons.person),
+                                        backgroundColor: colorScheme.surface,
+                                        child: const Icon(Icons.person),
                                       ),
                               ),
                             ),
@@ -170,33 +172,18 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 20.0),
                       Text('What are you looking for?',
-                          style: AppWidget.lightTextStyle()),
+                          style: textTheme.titleMedium?.copyWith(color: Colors.grey[600])),
                       const SizedBox(height: 10),
                       // --- Search TextField ---
-                      TextField(
+                      const TextField(
                         decoration: InputDecoration(
                           hintText: 'Search for products',
-                          prefixIcon: const Icon(Icons.search),
-                          filled: true,
-                          fillColor: const Color.fromARGB(255, 240, 240, 240),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(20.0),
-                            borderSide: const BorderSide(color: Colors.blue),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(20.0),
-                            borderSide: const BorderSide(color: Colors.blue),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(20.0),
-                            borderSide:
-                                const BorderSide(color: Colors.blue, width: 2.0),
-                          ),
+                          prefixIcon: Icon(Icons.search),
                         ),
                       ),
 
                       const SizedBox(height: 30.0),
-                      Text('Categories', style: AppWidget.boldTextStyle()),
+                      Text('Categories', style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
                       const SizedBox(height: 20.0),
                       // --- Categories List ---
                       SizedBox(
@@ -223,19 +210,19 @@ class _HomeScreenState extends State<HomeScreen> {
                               child: Container(
                                 width: 100,
                                 decoration: BoxDecoration(
-                                  color: isAll ? Colors.blue : Colors.transparent,
+                                  color: isAll ? colorScheme.primary : colorScheme.surface,
                                   border:
-                                      Border.all(color: Colors.blue, width: 2),
+                                      Border.all(color: colorScheme.primary, width: 2),
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: isAll
                                     ? Center(
                                         child: Text(
                                           'All',
-                                          style: AppWidget.boldTextStyle()
-                                              .copyWith(
-                                                  color: Colors.white,
-                                                  fontSize: 18),
+                                          style: textTheme.titleMedium?.copyWith(
+                                            color: colorScheme.onPrimary,
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                         ),
                                       )
                                     : ClipRRect(
@@ -258,7 +245,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text('Featured Products',
-                              style: AppWidget.boldTextStyle()),
+                              style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
                           GestureDetector(
                             onTap: () {
                               Navigator.push(
@@ -269,8 +256,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             },
                             child: Text(
                               'See All',
-                              style: AppWidget.lightTextStyle().copyWith(
-                                color: Colors.blue,
+                              style: textTheme.titleSmall?.copyWith(
+                                color: colorScheme.primary,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),

@@ -1,5 +1,3 @@
-// You can add this widget in the same file as your HomeScreen or a new file.
-
 import 'package:flutter/material.dart';
 
 class ProductCardSkeleton extends StatelessWidget {
@@ -7,10 +5,14 @@ class ProductCardSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final skeletonColor = theme.brightness == Brightness.light ? Colors.grey[300] : Colors.grey[800];
+
     return Container(
       width: 160,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
@@ -20,7 +22,7 @@ class ProductCardSkeleton extends StatelessWidget {
           Container(
             height: 140,
             decoration: BoxDecoration(
-              color: Colors.grey[300],
+              color: skeletonColor,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
             ),
           ),
@@ -34,13 +36,13 @@ class ProductCardSkeleton extends StatelessWidget {
                 Container(
                   height: 12,
                   width: double.infinity,
-                  color: Colors.grey[300],
+                  color: skeletonColor,
                 ),
                 const SizedBox(height: 5),
                 Container(
                   height: 12,
                   width: 100,
-                  color: Colors.grey[300],
+                  color: skeletonColor,
                 ),
               ],
             ),
@@ -51,7 +53,7 @@ class ProductCardSkeleton extends StatelessWidget {
             child: Container(
               height: 14,
               width: 60,
-              color: Colors.grey[300],
+              color: skeletonColor,
             ),
           ),
           const SizedBox(height: 8),

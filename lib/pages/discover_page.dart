@@ -1,9 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ecommerce_shop/services/stream_builders/vertical_stream_builder.dart';
-import 'package:ecommerce_shop/widget/support_widget.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-
 
 class DiscoverPage extends StatefulWidget {
   const DiscoverPage({super.key});
@@ -29,76 +26,40 @@ class _DiscoverPageState extends State<DiscoverPage> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final textTheme = theme.textTheme;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F9FB),
-      body: Column(
-        children: [
-          _buildHeader(),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(vertical: 20.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildSearchField(),
-                  const SizedBox(height: 24),
-                  _buildInfoSection(),
-                  const SizedBox(height: 24),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                    child: Text(
-                      "All Products",
-                      style: AppWidget.boldTextStyle().copyWith(fontSize: 22),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  
-                  VerticalProductsList(
-                    stream: FirebaseFirestore.instance.collection('products').snapshots(),
-                  ),
-
-                ],
-              ),
-            ),
-          ),
-        ],
+      appBar: AppBar(
+        title: const Text('Discover Products'),
+        centerTitle: true,
       ),
-    );
-  }
-
-  // --- Helper methods for building the page-specific UI ---
-
-  Widget _buildHeader() {
-    return Material(
-      elevation: 4,
-      shadowColor: Colors.black.withOpacity(0.1),
-      color: Colors.white,
-      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(30)),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 50, 20, 25),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(vertical: 20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            GestureDetector(
-              onTap: () => Navigator.pop(context),
-              child: const Icon(Icons.arrow_back_ios_new_outlined, color: Colors.black54),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20.0),
+              child: _buildSearchField(),
             ),
-            const SizedBox(height: 20),
-            RichText(
-              text: TextSpan(
-                style: GoogleFonts.lato(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                ),
-                children: const [
-                  TextSpan(text: "Discover Products\nWith "),
-                  TextSpan(
-                    text: "Kartsy",
-                    style: TextStyle(color: Colors.blue, fontWeight: FontWeight.w900),
-                  ),
-                ],
+            const SizedBox(height: 24),
+            _buildInfoSection(),
+            const SizedBox(height: 24),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20.0),
+              child: Text(
+                "All Products",
+                style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
               ),
+            ),
+            const SizedBox(height: 10),
+            
+            // Note: Wrapping a ListView/GridView inside a SingleChildScrollView
+            // can cause performance issues with very long lists.
+            // For now, this is the simplest stable approach.
+            VerticalProductsList(
+              stream: FirebaseFirestore.instance.collection('products').snapshots(),
             ),
           ],
         ),
@@ -107,22 +68,11 @@ class _DiscoverPageState extends State<DiscoverPage> {
   }
 
   Widget _buildSearchField() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: TextField(
-        controller: _searchController,
-        decoration: InputDecoration(
-          hintText: "Search products...",
-          prefixIcon: const Icon(Icons.search, color: Colors.grey),
-          filled: true,
-          fillColor: Colors.white,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(15),
-            borderSide: BorderSide.none,
-          ),
-          contentPadding: const EdgeInsets.symmetric(vertical: 18),
-        ),
-        style: AppWidget.lightTextStyle(),
+    return TextField(
+      controller: _searchController,
+      decoration: const InputDecoration(
+        hintText: "Search products...",
+        prefixIcon: Icon(Icons.search, color: Colors.grey),
       ),
     );
   }
@@ -142,17 +92,21 @@ class _DiscoverPageState extends State<DiscoverPage> {
   }
 
   Widget _buildInfoCard({required IconData icon, required String text}) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: BoxDecoration(
-        color: Colors.blue.withOpacity(0.08),
+        color: colorScheme.primary.withAlpha(25),
         borderRadius: BorderRadius.circular(15),
       ),
       child: Row(
         children: [
-          Icon(icon, size: 24, color: Colors.blue),
+          Icon(icon, size: 24, color: colorScheme.primary),
           const SizedBox(width: 12),
-          Text(text, style: AppWidget.boldTextStyle().copyWith(color: Colors.black87)),
+          Text(text, style: textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
         ],
       ),
     );

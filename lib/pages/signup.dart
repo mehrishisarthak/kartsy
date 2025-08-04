@@ -6,7 +6,6 @@ import 'package:ecommerce_shop/services/shared_preferences.dart';
 import 'package:ecommerce_shop/utils/authmethods.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:lottie/lottie.dart';
 import 'package:random_string/random_string.dart';
 
@@ -53,7 +52,7 @@ class _SignupPageState extends State<SignupPage> {
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(
         content: Text(message),
-        backgroundColor: isError ? Colors.redAccent : Colors.green,
+        backgroundColor: isError ? Theme.of(context).colorScheme.error : Colors.green,
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 3),
       ));
@@ -147,17 +146,21 @@ class _SignupPageState extends State<SignupPage> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+
     return Scaffold(
       // Use a container with a gradient for a more modern background
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Color(0xFFE3F2FD), // A lighter shade of blue
-              Colors.white,
-              Colors.white,
+              colorScheme.primary.withAlpha(26), // 0.1 opacity
+              colorScheme.surface,
+              colorScheme.surface,
             ],
           ),
         ),
@@ -181,18 +184,16 @@ class _SignupPageState extends State<SignupPage> {
                   Text(
                     "Create Your Account",
                     textAlign: TextAlign.center,
-                    style: GoogleFonts.poppins(
-                      fontSize: 26,
+                    style: textTheme.headlineMedium?.copyWith(
                       fontWeight: FontWeight.bold,
-                      color: const Color(0xFF0D47A1), // A deep blue color
+                      color: colorScheme.primary,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     "Let's get started!",
                     textAlign: TextAlign.center,
-                    style: GoogleFonts.poppins(
-                      fontSize: 16,
+                    style: textTheme.titleMedium?.copyWith(
                       color: Colors.grey[600],
                     ),
                   ),
@@ -254,24 +255,7 @@ class _SignupPageState extends State<SignupPage> {
       keyboardType: keyboardType,
       decoration: InputDecoration(
         hintText: hintText,
-        hintStyle: GoogleFonts.poppins(color: Colors.grey[500]),
         prefixIcon: Icon(icon, color: Colors.grey[500]),
-        filled: true,
-        fillColor: Colors.white,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none, // No border for a cleaner look
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.blue.shade400, width: 2.0),
-        ),
       ),
     );
   }
@@ -283,7 +267,6 @@ class _SignupPageState extends State<SignupPage> {
       obscureText: !_isPasswordVisible,
       decoration: InputDecoration(
         hintText: "Password",
-        hintStyle: GoogleFonts.poppins(color: Colors.grey[500]),
         prefixIcon: Icon(Icons.lock_outline, color: Colors.grey[500]),
         suffixIcon: IconButton(
           icon: Icon(
@@ -296,67 +279,21 @@ class _SignupPageState extends State<SignupPage> {
             });
           },
         ),
-        filled: true,
-        fillColor: Colors.white,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.blue.shade400, width: 2.0),
-        ),
       ),
     );
   }
   
-  /// A helper widget for the main signup button with gradient and shadow.
+  /// A helper widget for the main signup button.
   Widget _buildSignupButton() {
-    return Container(
+    return SizedBox(
       height: 55,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF42A5F5), Color(0xFF1976D2)],
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.blue.withOpacity(0.3),
-            spreadRadius: 1,
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
       child: ElevatedButton(
         onPressed: _isLoading ? null : _handleSignup,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.transparent,
-          shadowColor: Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
         child: _isLoading
-            ? const CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+            ? CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Theme.of(context).colorScheme.onPrimary),
               )
-            : Text(
-                "Sign Up",
-                style: GoogleFonts.poppins(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                ),
-              ),
+            : const Text("Sign Up"),
       ),
     );
   }
@@ -370,7 +307,7 @@ class _SignupPageState extends State<SignupPage> {
           padding: const EdgeInsets.symmetric(horizontal: 12.0),
           child: Text(
             "OR",
-            style: GoogleFonts.poppins(
+            style: TextStyle(
               color: Colors.grey[600],
               fontWeight: FontWeight.w500,
             ),
@@ -383,6 +320,7 @@ class _SignupPageState extends State<SignupPage> {
 
   /// A helper widget for the Google signup button.
   Widget _buildGoogleSignupButton() {
+    final theme = Theme.of(context);
     return SizedBox(
       height: 55,
       child: OutlinedButton.icon(
@@ -393,14 +331,12 @@ class _SignupPageState extends State<SignupPage> {
         ),
         label: Text(
           "Sign up with Google",
-          style: GoogleFonts.poppins(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: Colors.grey[800],
+          style: theme.textTheme.labelLarge?.copyWith(
+            color: theme.colorScheme.onSurface.withAlpha(((0.8) * 255).toInt()), // Adjusted for better visibility
           ),
         ),
         style: OutlinedButton.styleFrom(
-          backgroundColor: Colors.white,
+          backgroundColor: theme.colorScheme.surface,
           side: BorderSide(color: Colors.grey.shade300),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
@@ -412,12 +348,15 @@ class _SignupPageState extends State<SignupPage> {
 
   /// A helper widget for the link to the login page.
   Widget _buildLoginLink() {
+    final textTheme = Theme.of(context).textTheme;
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Text(
           "Already have an account?",
-          style: GoogleFonts.poppins(fontSize: 15, color: Colors.grey[700]),
+          style: textTheme.bodyMedium?.copyWith(color: Colors.grey[700]),
         ),
         TextButton(
           onPressed: () {
@@ -428,10 +367,9 @@ class _SignupPageState extends State<SignupPage> {
           },
           child: Text(
             "Login",
-            style: GoogleFonts.poppins(
-              color: const Color(0xFF1976D2),
+            style: textTheme.bodyMedium?.copyWith(
+              color: colorScheme.primary,
               fontWeight: FontWeight.bold,
-              fontSize: 15,
             ),
           ),
         )

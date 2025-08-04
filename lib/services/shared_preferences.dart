@@ -84,6 +84,6 @@ class SharedPreferenceHelper {
     await prefs.remove(userEmailkey);
     await prefs.remove(userImagekey);
     await prefs.remove(userAddressKey);
-    await prefs.remove(themeKey); // Also clear the theme
+    // we keep theme preference intact
   }
 }

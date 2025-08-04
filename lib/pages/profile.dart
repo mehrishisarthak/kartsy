@@ -1,5 +1,4 @@
 import 'dart:io';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ecommerce_shop/pages/admin_login.dart';
 import 'package:ecommerce_shop/pages/settings.dart';
@@ -162,7 +161,7 @@ class _ProfilePageState extends State<ProfilePage> {
   void _showErrorSnackBar(String message) {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message), backgroundColor: Colors.red),
+        SnackBar(content: Text(message), backgroundColor: Theme.of(context).colorScheme.error),
       );
     }
   }
@@ -270,7 +269,9 @@ class _ProfilePageState extends State<ProfilePage> {
                     _isPhoneVerified = true;
                     _verifiedPhoneNumber = '+91${_mobileController.text.trim()}';
                   });
+                  // ignore: use_build_context_synchronously
                   Navigator.pop(context);
+                  // ignore: use_build_context_synchronously
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Phone number verified successfully!"), backgroundColor: Colors.green));
                 }
               } catch (e) {
@@ -345,13 +346,7 @@ class _ProfilePageState extends State<ProfilePage> {
       isExpanded: true,
       items: items.map((String item) => DropdownMenuItem<String>(value: item, child: Text(item, overflow: TextOverflow.ellipsis))).toList(),
       onChanged: onChanged,
-      decoration: InputDecoration(
-        filled: true,
-        fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey.shade300, width: 1.5), borderRadius: BorderRadius.circular(12)),
-      ),
+      decoration: const InputDecoration(),
     );
   }
 
@@ -362,19 +357,18 @@ class _ProfilePageState extends State<ProfilePage> {
       inputFormatters: inputFormatters,
       decoration: InputDecoration(
         hintText: hintText,
-        prefixIcon: Icon(icon, color: Colors.blue),
+        prefixIcon: Icon(icon, color: Theme.of(context).colorScheme.primary),
         prefixText: prefixText,
-        prefixStyle: const TextStyle(fontSize: 16, color: Colors.black87),
-        filled: true,
-        fillColor: Colors.white,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey.shade300, width: 1.5), borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+
     ImageProvider imageProvider;
     if (_imageFile != null) {
       imageProvider = FileImage(_imageFile!);
@@ -385,19 +379,15 @@ class _ProfilePageState extends State<ProfilePage> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F9FB),
       appBar: AppBar(
         actions: [
-          IconButton(icon: const Icon(Icons.settings, color: Colors.blue), onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const SettingsPage()))),
+          IconButton(icon: const Icon(Icons.settings), onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const SettingsPage()))),
         ],
-        leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.blue), onPressed: () => Navigator.pop(context)),
-        title: Text("Edit Profile", style: TextStyle(color: Colors.blue[700], fontWeight: FontWeight.bold)),
-        centerTitle: true,
-        backgroundColor: Colors.white,
-        elevation: 1,
+        leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.pop(context)),
+        title: const Text("Edit Profile"),
       ),
       body: personData == null
-          ? const Center(child: CircularProgressIndicator(color: Colors.blue))
+          ? Center(child: CircularProgressIndicator(color: colorScheme.primary))
           : SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(24, 24, 24, 120),
               child: Column(
@@ -410,83 +400,76 @@ class _ProfilePageState extends State<ProfilePage> {
                       children: [
                         Container(
                           padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(border: Border.all(color: Colors.blue, width: 3), shape: BoxShape.circle),
-                          child: CircleAvatar(radius: 60, backgroundColor: Colors.white, backgroundImage: imageProvider),
+                          decoration: BoxDecoration(border: Border.all(color: colorScheme.primary, width: 3), shape: BoxShape.circle),
+                          child: CircleAvatar(radius: 60, backgroundColor: colorScheme.surface, backgroundImage: imageProvider),
                         ),
                         Container(
                           padding: const EdgeInsets.all(6),
-                          decoration: const BoxDecoration(color: Colors.blue, shape: BoxShape.circle),
-                          child: const Icon(Icons.edit, color: Colors.white, size: 20),
+                          decoration: BoxDecoration(color: colorScheme.primary, shape: BoxShape.circle),
+                          child: Icon(Icons.edit, color: colorScheme.onPrimary, size: 20),
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 12),
-                  Text(personData!['Name'] ?? 'No Name', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                  Text(personData!['Name'] ?? 'No Name', style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 6),
-                  Text("Email: ${personData!['Email'] ?? 'Not Provided'}", style: TextStyle(fontSize: 16, color: Colors.grey[700])),
+                  Text("Email: ${personData!['Email'] ?? 'Not Provided'}", style: textTheme.titleMedium?.copyWith(color: Colors.grey[700])),
                   const SizedBox(height: 30),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [BoxShadow(color: Colors.grey.shade200, blurRadius: 10, spreadRadius: 2)],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text("Contact & Address Info", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 20),
-                        TextFormField(
-                          controller: _mobileController,
-                          keyboardType: TextInputType.phone,
-                          readOnly: _isPhoneVerified,
-                          inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(10)],
-                          decoration: InputDecoration(
-                            hintText: "98765 43210",
-                            prefixIcon: const Icon(Icons.phone_android, color: Colors.blue),
-                            prefixText: "+91 ",
-                            prefixStyle: const TextStyle(fontSize: 16, color: Colors.black87),
-                            filled: true,
-                            fillColor: _isPhoneVerified ? Colors.grey.shade200 : Colors.white,
-                            suffixIcon: TextButton(
-                              onPressed: _isPhoneVerified ? null : _verifyPhoneNumber,
-                              child: _isLoading
-                                  ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                                  : _isPhoneVerified 
-                                    ? const Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.check_circle, color: Colors.green), SizedBox(width: 4), Text("Verified")])
-                                    : const Text("Verify", style: TextStyle(color: Colors.blue)),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text("Contact & Address Info", style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 20),
+                          TextFormField(
+                            controller: _mobileController,
+                            keyboardType: TextInputType.phone,
+                            readOnly: _isPhoneVerified,
+                            inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(10)],
+                            decoration: InputDecoration(
+                              hintText: "98765 43210",
+                              prefixIcon: Icon(Icons.phone_android, color: colorScheme.primary),
+                              prefixText: "+91 ",
+                              fillColor: _isPhoneVerified ? Colors.grey.shade200.withAlpha((0.5 * 255).toInt()) : null,
+                              suffixIcon: TextButton(
+                                onPressed: _isPhoneVerified ? null : _verifyPhoneNumber,
+                                child: _isLoading
+                                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                                    : _isPhoneVerified 
+                                      ? Row(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.check_circle, color: Colors.green), const SizedBox(width: 4), Text("Verified", style: TextStyle(color: colorScheme.onSurface))])
+                                      : Text("Verify", style: TextStyle(color: colorScheme.primary)),
+                              ),
                             ),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                            enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.grey.shade300, width: 1.5), borderRadius: BorderRadius.circular(12)),
                           ),
-                        ),
-                        const SizedBox(height: 16),
-                        _buildDropdown(
-                          hint: "Select State",
-                          value: _selectedState,
-                          items: indianStatesAndCities.keys.toList(),
-                          onChanged: (newValue) {
-                            setState(() {
-                              _selectedState = newValue;
-                              _selectedCity = null;
-                              _cities = indianStatesAndCities[newValue] ?? [];
-                            });
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        _buildDropdown(
-                          hint: "Select City",
-                          value: _selectedCity,
-                          items: _cities,
-                          onChanged: _selectedState == null ? null : (newValue) => setState(() => _selectedCity = newValue),
-                        ),
-                        const SizedBox(height: 16),
-                        _buildTextField(controller: _localAddressController, hintText: "House No, Street, Landmark", icon: Icons.location_on_outlined),
-                        const SizedBox(height: 16),
-                        _buildTextField(controller: _pincodeController, hintText: "Pincode", icon: Icons.pin_drop_outlined, keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)]),
-                      ],
+                          const SizedBox(height: 16),
+                          _buildDropdown(
+                            hint: "Select State",
+                            value: _selectedState,
+                            items: indianStatesAndCities.keys.toList(),
+                            onChanged: (newValue) {
+                              setState(() {
+                                _selectedState = newValue;
+                                _selectedCity = null;
+                                _cities = indianStatesAndCities[newValue] ?? [];
+                              });
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          _buildDropdown(
+                            hint: "Select City",
+                            value: _selectedCity,
+                            items: _cities,
+                            onChanged: _selectedState == null ? null : (newValue) => setState(() => _selectedCity = newValue),
+                          ),
+                          const SizedBox(height: 16),
+                          _buildTextField(controller: _localAddressController, hintText: "House No, Street, Landmark", icon: Icons.location_on_outlined),
+                          const SizedBox(height: 16),
+                          _buildTextField(controller: _pincodeController, hintText: "Pincode", icon: Icons.pin_drop_outlined, keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)]),
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -494,31 +477,25 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
       bottomNavigationBar: Container(
         padding: const EdgeInsets.all(20),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -4))],
+        decoration: BoxDecoration(
+          color: colorScheme.surface,
+          boxShadow: [BoxShadow(color: Colors.black.withAlpha(25), blurRadius: 10, offset: const Offset(0, -4))],
         ),
         child: SizedBox(
           height: 55,
           width: double.infinity,
           child: ElevatedButton(
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminLoginPage())),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
-              elevation: 6,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            ),
-            child: const Text("Are you an admin? Tap here", style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16)),
+            child: const Text("Are you an admin? Tap here"),
           ),
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _isLoading ? null : _saveProfile,
-        backgroundColor: Colors.blue,
-        label: Text(_isLoading ? "Saving..." : "Save Profile", style: const TextStyle(color: Colors.white)),
+        label: Text(_isLoading ? "Saving..." : "Save Profile"),
         icon: _isLoading
-            ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-            : const Icon(Icons.save, color: Colors.white),
+            ? SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: colorScheme.onPrimary, strokeWidth: 2))
+            : const Icon(Icons.save),
       ),
     );
   }

@@ -14,19 +14,22 @@ class AdminHomePage extends StatefulWidget {
 class _AdminHomePageState extends State<AdminHomePage> {
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+
     return DefaultTabController(
       length: 2, // The number of tabs
       child: Scaffold(
-        backgroundColor: const Color(0xFFF2F5F8),
         appBar: PreferredSize(
           preferredSize: const Size.fromHeight(140), // Increased height for tabs
           child: Container(
             padding: const EdgeInsets.only(top: 40),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
+              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(30)),
               boxShadow: [
-                BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 4)),
+                BoxShadow(color: Colors.black.withAlpha(25), blurRadius: 10, offset: const Offset(0, 4)),
               ],
             ),
             child: Column(
@@ -36,25 +39,24 @@ class _AdminHomePageState extends State<AdminHomePage> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.admin_panel_settings_outlined, color: Colors.blue, size: 28),
+                      Icon(Icons.admin_panel_settings_outlined, color: colorScheme.primary, size: 28),
                       const SizedBox(width: 10),
                       Text(
                         'Admin Dashboard',
-                        style: TextStyle(
-                          fontSize: 24,
+                        style: textTheme.headlineSmall?.copyWith(
                           fontWeight: FontWeight.bold,
-                          color: Colors.blue.shade800,
+                          color: colorScheme.primary,
                         ),
                       ),
                     ],
                   ),
                 ),
                 const Spacer(),
-                const TabBar(
-                  indicatorColor: Colors.blue,
-                  labelColor: Colors.blue,
+                TabBar(
+                  indicatorColor: colorScheme.primary,
+                  labelColor: colorScheme.primary,
                   unselectedLabelColor: Colors.grey,
-                  tabs: [
+                  tabs: const [
                     Tab(icon: Icon(Icons.storefront), text: "Your Listings"),
                     Tab(icon: Icon(Icons.shopping_bag_outlined), text: "New Orders"),
                   ],
@@ -78,11 +80,11 @@ class _AdminHomePageState extends State<AdminHomePage> {
               MaterialPageRoute(builder: (_) => AddProduct(adminID: widget.adminId)),
             );
           },
-          backgroundColor: Colors.blue,
-          icon: const Icon(Icons.add, color: Colors.white),
-          label: const Text(
+          backgroundColor: colorScheme.primary,
+          icon: Icon(Icons.add, color: colorScheme.onPrimary),
+          label: Text(
             "Add New Product",
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            style: textTheme.labelLarge?.copyWith(color: colorScheme.onPrimary, fontWeight: FontWeight.bold),
           ),
         ),
       ),
@@ -119,9 +121,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
             final data = doc.data() as Map<String, dynamic>;
 
             return Card(
-              elevation: 2,
               margin: const EdgeInsets.only(bottom: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               child: Padding(
                 padding: const EdgeInsets.all(8.0),
                 child: Row(
@@ -146,14 +146,14 @@ class _AdminHomePageState extends State<AdminHomePage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(data['Name'] ?? 'Unnamed Product', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          Text(data['Name'] ?? 'Unnamed Product', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
                           const SizedBox(height: 4),
                           Text("₹${data['Price']?.toString() ?? 'N/A'}", style: TextStyle(fontSize: 15, color: Colors.green.shade700, fontWeight: FontWeight.w600)),
                         ],
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                      icon: Icon(Icons.delete_outline, color: Theme.of(context).colorScheme.error),
                       onPressed: () {
                         // TODO: Implement delete product logic with confirmation dialog
                       },
@@ -199,9 +199,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
             final timestamp = (data['timestamp'] as Timestamp?)?.toDate();
 
             return Card(
-              elevation: 2,
               margin: const EdgeInsets.only(bottom: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               child: Padding(
                 padding: const EdgeInsets.all(12.0),
                 child: Column(
@@ -216,7 +214,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                           width: 60,
                           height: 60,
                           fit: BoxFit.cover,
-                           errorBuilder: (_, __, ___) => Container(width: 60, height: 60, color: Colors.grey.shade200, child: const Icon(Icons.image_not_supported)),
+                          errorBuilder: (_, __, ___) => Container(width: 60, height: 60, color: Colors.grey.shade200, child: const Icon(Icons.image_not_supported)),
                         ),
                       ),
                       title: Text(data['productName'] ?? 'Unknown Product', style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -239,12 +237,12 @@ class _AdminHomePageState extends State<AdminHomePage> {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
-                               Text("Order Date:", style: TextStyle(color: Colors.grey.shade600)),
-                               const SizedBox(height: 4),
-                               Text(
+                              Text("Order Date:", style: TextStyle(color: Colors.grey.shade600)),
+                              const SizedBox(height: 4),
+                              Text(
                                 timestamp != null ? DateFormat('dd MMM yyyy, hh:mm a').format(timestamp) : 'N/A',
                                 style: const TextStyle(fontWeight: FontWeight.w600),
-                               ),
+                              ),
                             ],
                           )
                         ],
@@ -262,10 +260,11 @@ class _AdminHomePageState extends State<AdminHomePage> {
 
   /// Dropdown for updating order status.
   Widget _buildStatusDropdown(String orderId, String currentStatus) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.blue.shade50,
+        color: colorScheme.primary.withAlpha(25),
         borderRadius: BorderRadius.circular(8),
       ),
       child: DropdownButton<String>(
@@ -296,13 +295,17 @@ class _AdminHomePageState extends State<AdminHomePage> {
           .doc(orderId)
           .update({'orderStatus': newStatus});
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Order status updated!"), backgroundColor: Colors.green),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Order status updated!"), backgroundColor: Colors.green),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Failed to update status: $e"), backgroundColor: Colors.red),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Failed to update status: $e"), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 }

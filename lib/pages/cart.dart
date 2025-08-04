@@ -3,9 +3,7 @@ import 'package:ecommerce_shop/pages/profile.dart';
 import 'package:ecommerce_shop/services/cart_provider.dart';
 import 'package:ecommerce_shop/services/shared_preferences.dart';
 import 'package:ecommerce_shop/utils/database.dart';
-import 'package:ecommerce_shop/widget/support_widget.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:lottie/lottie.dart';
 import 'package:provider/provider.dart';
 
@@ -37,7 +35,10 @@ class _CartPageState extends State<CartPage> {
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(
         content: Text(message),
-        backgroundColor: isError ? Colors.red : Colors.green,
+        backgroundColor: isError ? Theme.of(context).colorScheme.error : Colors.green,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(20),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ));
   }
 
@@ -49,7 +50,6 @@ class _CartPageState extends State<CartPage> {
     try {
       await action();
     } finally {
-      // Small delay to let UI updates settle
       await Future.delayed(const Duration(milliseconds: 300));
       if (mounted) setState(() => _isBusy = false);
     }
@@ -67,8 +67,6 @@ class _CartPageState extends State<CartPage> {
         final docSnapshot = await transaction.get(docRef);
 
         if (!docSnapshot.exists) {
-          // ignore: avoid_print
-          print("Item document does not exist, cannot update.");
           return;
         }
 
@@ -82,10 +80,9 @@ class _CartPageState extends State<CartPage> {
         }
       });
 
-      // Update local state AFTER the transaction is confirmed successful
       if (mounted) {
         final itemInCart = cartProvider.cart.any((item) => item['id'] == itemId);
-        if(!itemInCart) return;
+        if (!itemInCart) return;
 
         final currentLocalQuantity = cartProvider.cart.firstWhere((item) => item['id'] == itemId)['quantity'] as int;
         final newLocalQuantity = currentLocalQuantity + delta;
@@ -98,8 +95,6 @@ class _CartPageState extends State<CartPage> {
       }
     } catch (e) {
       if (mounted) _showSnackBar('Could not update item.', isError: true);
-      // ignore: avoid_print
-      print("Error during transaction: $e");
     }
   }
 
@@ -111,13 +106,11 @@ class _CartPageState extends State<CartPage> {
     final originalItem = Map<String, dynamic>.from(cartProvider.cart.firstWhere((i) => i['id'] == itemId));
     final originalIndex = cartProvider.cart.indexWhere((i) => i['id'] == itemId);
 
-    // Optimistic UI update
     cartProvider.removeFromCart(itemId);
 
     try {
       await FirebaseFirestore.instance.collection('users').doc(userID).collection('cart').doc(itemId).delete();
     } catch (e) {
-      // Revert UI on error
       if(mounted) {
         cartProvider.addItemAt(originalIndex, originalItem);
         _showSnackBar('Could not remove item. Please try again.', isError: true);
@@ -138,16 +131,15 @@ class _CartPageState extends State<CartPage> {
       return;
     }
 
-    // --- Address Validation ---
     final prefs = SharedPreferenceHelper();
     final address = await prefs.getUserAddress();
 
     if (address == null ||
         address['state'] == null ||
         address['city'] == null ||
-        (address['local'] == null || (address['local'] as String).isEmpty) ||
-        (address['pincode'] == null || (address['pincode'] as String).isEmpty) ||
-        (address['mobile'] == null || (address['mobile'] as String).isEmpty)) {
+        address['local'] == null || (address['local'] as String).isEmpty ||
+        address['pincode'] == null || (address['pincode'] as String).isEmpty ||
+        address['mobile'] == null || (address['mobile'] as String).isEmpty) {
       _showSnackBar("Please complete your profile address first.", isError: true);
       // ignore: use_build_context_synchronously
       Navigator.of(context).push(MaterialPageRoute(builder: (context) => const ProfilePage()));
@@ -167,6 +159,9 @@ class _CartPageState extends State<CartPage> {
   Widget build(BuildContext context) {
     final cartProvider = Provider.of<CartProvider>(context);
     final cart = cartProvider.cart;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
 
     final total = cart.fold<double>(0, (sum, item) {
       final price = item['Price'] as num? ?? 0;
@@ -175,15 +170,14 @@ class _CartPageState extends State<CartPage> {
     });
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FB),
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(80),
         child: Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(bottom: Radius.circular(30)),
             boxShadow: [
-              BoxShadow(color: Colors.black12, blurRadius: 12, offset: Offset(0, 4))
+              BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 12, offset: const Offset(0, 4))
             ],
           ),
           child: SafeArea(
@@ -192,9 +186,8 @@ class _CartPageState extends State<CartPage> {
               child: Center(
                 child: Text(
                   'Cart',
-                  style: AppWidget.boldTextStyle().copyWith(
-                        fontSize: 30,
-                        color: Colors.blue,
+                  style: textTheme.headlineMedium?.copyWith(
+                        color: colorScheme.primary,
                         fontWeight: FontWeight.w900,
                       ),
                 ),
@@ -203,52 +196,41 @@ class _CartPageState extends State<CartPage> {
           ),
         ),
       ),
-      body: cart.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Lottie.asset('images/emptyCart.json', height: 300),
-                  const SizedBox(height: 20),
-                  Text(
-                    'Your cart is empty!',
-                    style: GoogleFonts.lato(
-                      fontSize: 22,
-                      color: Colors.blueGrey,
-                      fontWeight: FontWeight.bold,
+      body: SafeArea(
+        top: false,
+        bottom: false,
+        child: cart.isEmpty
+            ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Lottie.asset('images/emptyCart.json', height: 300),
+                    const SizedBox(height: 20),
+                    Text(
+                      'Your cart is empty!',
+                      style: textTheme.headlineSmall?.copyWith(
+                        color: Colors.blueGrey,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            )
-          : Stack(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 140),
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
+                  ],
+                ),
+              )
+            : Stack(
+                children: [
+                  ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 230),
                     itemCount: cart.length,
                     itemBuilder: (context, index) {
                       final item = cart[index];
-                      return Container(
+                      return Card(
                         margin: const EdgeInsets.only(bottom: 16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Colors.black12,
-                              blurRadius: 10,
-                              offset: Offset(0, 4),
-                            ),
-                          ],
-                        ),
                         child: Row(
                           children: [
                             ClipRRect(
                               borderRadius: const BorderRadius.only(
-                                topLeft: Radius.circular(16),
-                                bottomLeft: Radius.circular(16),
+                                topLeft: Radius.circular(12),
+                                bottomLeft: Radius.circular(12),
                               ),
                               child: Image.network(
                                 item['Image'] ?? '',
@@ -261,43 +243,40 @@ class _CartPageState extends State<CartPage> {
                             const SizedBox(width: 16),
                             Expanded(
                               child: Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
                                       item['Name'] ?? 'No Name',
-                                      style: AppWidget.boldTextStyle().copyWith(fontSize: 20, color: Colors.black87),
+                                      style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                     ),
-                                    const SizedBox(height: 8),
+                                    const SizedBox(height: 6),
                                     Text(
-                                      '₹${item['Price']} x ${item['quantity']}',
-                                      style: GoogleFonts.lato(fontSize: 16, color: Colors.grey[800]),
+                                      '₹${item['Price']}',
+                                      style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: colorScheme.primary),
                                     ),
-                                    const SizedBox(height: 10),
+                                    const SizedBox(height: 8),
                                     Row(
                                       children: [
-                                        IconButton(
-                                          icon: const Icon(Icons.remove_circle_outline),
-                                          onPressed: _isBusy ? null : () => _handleCartInteraction(
-                                            () => updateItemQuantity(item['id'], -1),
-                                          ),
+                                        _buildQuantityButton(
+                                          icon: Icons.remove,
+                                          onPressed: () => _handleCartInteraction(() => updateItemQuantity(item['id'], -1)),
                                         ),
-                                        Text('${item['quantity']}', style: AppWidget.boldTextStyle()),
-                                        IconButton(
-                                          icon: const Icon(Icons.add_circle_outline),
-                                          onPressed: _isBusy ? null : () => _handleCartInteraction(
-                                            () => updateItemQuantity(item['id'], 1),
-                                          ),
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                                          child: Text('${item['quantity']}', style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                                        ),
+                                        _buildQuantityButton(
+                                          icon: Icons.add,
+                                          onPressed: () => _handleCartInteraction(() => updateItemQuantity(item['id'], 1)),
                                         ),
                                         const Spacer(),
                                         IconButton(
-                                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                                          onPressed: _isBusy ? null : () => _handleCartInteraction(
-                                            () => removeItem(item['id']),
-                                          ),
+                                          icon: Icon(Icons.delete_outline, color: colorScheme.error),
+                                          onPressed: () => _handleCartInteraction(() => removeItem(item['id'])),
                                         ),
                                       ],
                                     )
@@ -310,59 +289,69 @@ class _CartPageState extends State<CartPage> {
                       );
                     },
                   ),
-                ),
-                Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 12, offset: Offset(0, -3))],
-                      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Card(
-                          elevation: 3,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                          margin: const EdgeInsets.only(bottom: 12),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text('Total', style: AppWidget.boldTextStyle().copyWith(fontSize: 18)),
-                                Text('₹${total.toStringAsFixed(2)}', style: AppWidget.boldTextStyle().copyWith(fontSize: 20, color: Colors.blue)),
-                              ],
-                            ),
-                          ),
-                        ),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 50,
-                          child: ElevatedButton(
-                            onPressed: _isBusy ? null : () => _handleCartInteraction(_handlePlaceOrder),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue,
-                              disabledBackgroundColor: Colors.blue.withOpacity(0.5),
-                              elevation: 6,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                            child: _isBusy
-                                ? const CircularProgressIndicator(color: Colors.white)
-                                : const Text(
-                                    "Place Order",
-                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
-                                  ),
-                          ),
-                        ),
-                      ],
-                    ),
+                  Positioned(
+                    bottom: 90,
+                    left: 0,
+                    right: 0,
+                    child: _buildCheckoutSection(total),
                   ),
-                ),
-              ],
+                ],
+              ),
+      ),
+    );
+  }
+
+  Widget _buildQuantityButton({required IconData icon, required VoidCallback onPressed}) {
+    return InkWell(
+      onTap: onPressed,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade200,
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon, size: 18),
+      ),
+    );
+  }
+
+  Widget _buildCheckoutSection(double total) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 20, offset: const Offset(0, -10))],
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Total', style: textTheme.titleLarge?.copyWith(color: Colors.grey[700])),
+              Text('₹${total.toStringAsFixed(2)}', style: textTheme.headlineSmall?.copyWith(color: colorScheme.primary, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            height: 55,
+            child: ElevatedButton(
+              onPressed: _isBusy ? null : () => _handleCartInteraction(_handlePlaceOrder),
+              child: _isBusy
+                  ? CircularProgressIndicator(color: colorScheme.onPrimary)
+                  : const Text("Place Order"),
             ),
+          ),
+        ],
+      ),
     );
   }
 }

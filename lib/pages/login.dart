@@ -6,7 +6,6 @@ import 'package:ecommerce_shop/services/shared_preferences.dart';
 import 'package:ecommerce_shop/utils/authmethods.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:lottie/lottie.dart';
 
 class LoginPage extends StatefulWidget {
@@ -35,7 +34,7 @@ class _LoginPageState extends State<LoginPage> {
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(
         content: Text(message),
-        backgroundColor: backgroundColor ?? (isError ? Colors.redAccent : Colors.green),
+        backgroundColor: backgroundColor ?? (isError ? Theme.of(context).colorScheme.error : Colors.green),
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 3),
       ));
@@ -60,6 +59,7 @@ class _LoginPageState extends State<LoginPage> {
             MaterialPageRoute(builder: (context) => const LoginPageAfterSignup()),
           );
         }
+        setState(() => _isLoading = false);
         return; // Stop further execution
       }
 
@@ -145,6 +145,10 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
@@ -152,9 +156,9 @@ class _LoginPageState extends State<LoginPage> {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Colors.lightBlue.shade50,
-              Colors.white,
-              Colors.white,
+              colorScheme.primary.withAlpha(25),
+              colorScheme.surface,
+              colorScheme.surface,
             ],
           ),
         ),
@@ -176,18 +180,16 @@ class _LoginPageState extends State<LoginPage> {
                   Text(
                     "Welcome Back!",
                     textAlign: TextAlign.center,
-                    style: GoogleFonts.poppins(
-                      fontSize: 26,
+                    style: textTheme.headlineMedium?.copyWith(
                       fontWeight: FontWeight.bold,
-                      color: const Color(0xFF0D47A1),
+                      color: colorScheme.primary,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     "Login to continue",
                     textAlign: TextAlign.center,
-                    style: GoogleFonts.poppins(
-                      fontSize: 16,
+                    style: textTheme.titleMedium?.copyWith(
                       color: Colors.grey[600],
                     ),
                   ),
@@ -237,23 +239,7 @@ class _LoginPageState extends State<LoginPage> {
       keyboardType: keyboardType,
       decoration: InputDecoration(
         hintText: hintText,
-        hintStyle: GoogleFonts.poppins(color: Colors.grey[500]),
         prefixIcon: Icon(icon, color: Colors.grey[500]),
-        filled: true,
-        fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.blue.shade400, width: 2.0),
-        ),
       ),
     );
   }
@@ -264,7 +250,6 @@ class _LoginPageState extends State<LoginPage> {
       obscureText: !_isPasswordVisible,
       decoration: InputDecoration(
         hintText: "Password",
-        hintStyle: GoogleFonts.poppins(color: Colors.grey[500]),
         prefixIcon: Icon(Icons.lock_outline, color: Colors.grey[500]),
         suffixIcon: IconButton(
           icon: Icon(
@@ -276,21 +261,6 @@ class _LoginPageState extends State<LoginPage> {
               _isPasswordVisible = !_isPasswordVisible;
             });
           },
-        ),
-        filled: true,
-        fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.blue.shade400, width: 2.0),
         ),
       ),
     );
@@ -305,8 +275,8 @@ class _LoginPageState extends State<LoginPage> {
           },
           child: Text(
             "Forgot Password?",
-            style: GoogleFonts.poppins(
-              color: const Color(0xFF1976D2),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.primary,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -315,45 +285,15 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Widget _buildLoginButton() {
-    return Container(
+    return SizedBox(
       height: 55,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF42A5F5), Color(0xFF1976D2)],
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.blue.withOpacity(0.3),
-            spreadRadius: 1,
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
       child: ElevatedButton(
         onPressed: _isLoading ? null : _handleLogin,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.transparent,
-          shadowColor: Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
         child: _isLoading
-            ? const CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+            ? CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Theme.of(context).colorScheme.onPrimary),
               )
-            : Text(
-                "Login",
-                style: GoogleFonts.poppins(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                ),
-              ),
+            : const Text("Login"),
       ),
     );
   }
@@ -366,7 +306,7 @@ class _LoginPageState extends State<LoginPage> {
           padding: const EdgeInsets.symmetric(horizontal: 12.0),
           child: Text(
             "OR",
-            style: GoogleFonts.poppins(
+            style: TextStyle(
               color: Colors.grey[600],
               fontWeight: FontWeight.w500,
             ),
@@ -378,6 +318,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Widget _buildGoogleLoginButton() {
+    final theme = Theme.of(context);
     return SizedBox(
       height: 55,
       child: OutlinedButton.icon(
@@ -388,14 +329,12 @@ class _LoginPageState extends State<LoginPage> {
         ),
         label: Text(
           "Sign in with Google",
-          style: GoogleFonts.poppins(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: Colors.grey[800],
+          style: theme.textTheme.labelLarge?.copyWith(
+            color: theme.colorScheme.onSurface.withOpacity(0.8),
           ),
         ),
         style: OutlinedButton.styleFrom(
-          backgroundColor: Colors.white,
+          backgroundColor: theme.colorScheme.surface,
           side: BorderSide(color: Colors.grey.shade300),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
@@ -406,12 +345,15 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Widget _buildSignupLink() {
+    final textTheme = Theme.of(context).textTheme;
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Text(
           "Don't have an account?",
-          style: GoogleFonts.poppins(fontSize: 15, color: Colors.grey[700]),
+          style: textTheme.bodyMedium?.copyWith(color: Colors.grey[700]),
         ),
         TextButton(
           onPressed: () {
@@ -422,10 +364,9 @@ class _LoginPageState extends State<LoginPage> {
           },
           child: Text(
             "Sign Up",
-            style: GoogleFonts.poppins(
-              color: const Color(0xFF1976D2),
+            style: textTheme.bodyMedium?.copyWith(
+              color: colorScheme.primary,
               fontWeight: FontWeight.bold,
-              fontSize: 15,
             ),
           ),
         )

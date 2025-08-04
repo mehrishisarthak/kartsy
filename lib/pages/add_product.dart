@@ -3,8 +3,6 @@ import 'dart:io';
 import 'package:ecommerce_shop/utils/database.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:ecommerce_shop/widget/support_widget.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:random_string/random_string.dart';
 
@@ -60,7 +58,7 @@ class _AddProductState extends State<AddProduct> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError ? Colors.red : Colors.green,
+        backgroundColor: isError ? Theme.of(context).colorScheme.error : Colors.green,
       ),
     );
   }
@@ -89,7 +87,6 @@ class _AddProductState extends State<AddProduct> {
         "Image": downloadUrl,
         "Description": _productDescriptionController.text.trim(),
         "Price": int.tryParse(_productPriceController.text.trim()) ?? 0,
-        // FIX: Changed "adminID" to "adminId" for consistency
         "adminId": widget.adminID,
       };
 
@@ -111,17 +108,19 @@ class _AddProductState extends State<AddProduct> {
 
   @override
   Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FB),
       appBar: AppBar(
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.blue),
+          icon: Icon(Icons.arrow_back, color: colorScheme.primary),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text("Add Product", style: AppWidget.boldTextStyle().copyWith(fontSize: 24, color: Colors.blue)),
-        centerTitle: true,
-        backgroundColor: Colors.white,
-        elevation: 2,
+        title: Text(
+          "Add Product",
+          style: textTheme.titleLarge?.copyWith(color: colorScheme.primary, fontWeight: FontWeight.bold),
+        ),
       ),
       body: SingleChildScrollView(
         child: Padding(
@@ -129,7 +128,7 @@ class _AddProductState extends State<AddProduct> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text("Upload Product Image", style: GoogleFonts.lato(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text("Upload Product Image", style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
               const SizedBox(height: 20),
               Center(
                 child: GestureDetector(
@@ -138,41 +137,43 @@ class _AddProductState extends State<AddProduct> {
                     height: 150,
                     width: 150,
                     decoration: BoxDecoration(
-                      border: Border.all(color: Colors.blue, width: 1.5),
+                      border: Border.all(color: colorScheme.primary, width: 1.5),
                       borderRadius: BorderRadius.circular(12),
+                      color: colorScheme.surface,
                     ),
                     child: selectedImage != null
                         ? ClipRRect(
                             borderRadius: BorderRadius.circular(10),
                             child: Image.file(selectedImage!, fit: BoxFit.cover),
                           )
-                        : const Center(child: Icon(Icons.camera_alt, size: 50, color: Colors.blue)),
+                        : Center(child: Icon(Icons.camera_alt, size: 50, color: colorScheme.primary)),
                   ),
                 ),
               ),
               const SizedBox(height: 30),
               
-              Text("Product Name", style: GoogleFonts.lato(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text("Product Name", style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
-              TextField(controller: _productNameController, decoration: _inputDecoration('Product Name')),
+              TextField(controller: _productNameController, decoration: const InputDecoration(hintText: 'Product Name')),
               
               const SizedBox(height: 20),
-              Text("Product Description", style: GoogleFonts.lato(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text("Product Description", style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
-              TextField(controller: _productDescriptionController, maxLines: 4, decoration: _inputDecoration('Product Description')),
+              TextField(controller: _productDescriptionController, maxLines: 4, decoration: const InputDecoration(hintText: 'Product Description')),
 
               const SizedBox(height: 20),
-              Text("Product Price (INR)", style: GoogleFonts.lato(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text("Product Price (INR)", style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
-              TextField(controller: _productPriceController, keyboardType: TextInputType.number, decoration: _inputDecoration('Price', prefixIcon: Icons.currency_rupee)),
+              TextField(controller: _productPriceController, keyboardType: TextInputType.number, decoration: const InputDecoration(hintText: 'Price', prefixIcon: Icon(Icons.currency_rupee))),
 
               const SizedBox(height: 20),
-              Text("Product Category", style: GoogleFonts.lato(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text("Product Category", style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.shade400),
+                  color: colorScheme.surface,
+                  border: Border.all(color: Theme.of(context).inputDecorationTheme.enabledBorder!.borderSide.color),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: DropdownButtonHideUnderline(
@@ -201,37 +202,12 @@ class _AddProductState extends State<AddProduct> {
           width: double.infinity,
           child: ElevatedButton.icon(
             onPressed: isLoading ? null : _uploadItem,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            icon: isLoading ? Container() : const Icon(Icons.add, color: Colors.white),
+            icon: isLoading ? Container() : const Icon(Icons.add),
             label: isLoading
-                ? const CircularProgressIndicator(color: Colors.white)
-                : const Text(
-                    "Add Product",
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
+                ? const CircularProgressIndicator()
+                : const Text("Add Product"),
           ),
         ),
-      ),
-    );
-  }
-
-  InputDecoration _inputDecoration(String hintText, {IconData? prefixIcon}) {
-    return InputDecoration(
-      hintText: hintText,
-      prefixIcon: prefixIcon != null ? Icon(prefixIcon, color: Colors.blue) : null,
-      filled: true,
-      fillColor: Colors.white,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Colors.grey.shade400),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Colors.blue, width: 2.0),
       ),
     );
   }

@@ -1,8 +1,6 @@
 import 'package:ecommerce_shop/services/cart_provider.dart';
 import 'package:ecommerce_shop/services/shared_preferences.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:ecommerce_shop/widget/support_widget.dart';
 import 'package:provider/provider.dart';
 
 class ProductDetails extends StatefulWidget {
@@ -27,24 +25,30 @@ class _ProductDetailsState extends State<ProductDetails> {
       }
 
       // Let the provider handle both local state and database operations
-      // ignore: use_build_context_synchronously
-      await Provider.of<CartProvider>(context, listen: false)
-          .addToCart(userId, widget.productData);
+      if (mounted) {
+        await Provider.of<CartProvider>(context, listen: false)
+            .addToCart(userId, widget.productData);
+      }
 
-      // ignore: use_build_context_synchronously
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Product added to cart successfully!"),
-          backgroundColor: Colors.green,
-          duration: Duration(seconds: 1),
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Product added to cart successfully!"),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
     } catch (e) {
       debugPrint("Error adding to cart: $e");
-      // ignore: use_build_context_synchronously
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error adding to cart: ${e.toString()}")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error adding to cart: ${e.toString()}"),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -55,25 +59,26 @@ class _ProductDetailsState extends State<ProductDetails> {
   @override
   Widget build(BuildContext context) {
     final product = widget.productData;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FB),
-
       // --- AppBar ---
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(80),
         child: Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.only(
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            borderRadius: const BorderRadius.only(
               bottomLeft: Radius.circular(30),
               bottomRight: Radius.circular(30),
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black12,
+                color: Colors.black.withOpacity(0.1),
                 blurRadius: 12,
-                offset: Offset(0, 4),
+                offset: const Offset(0, 4),
               ),
             ],
           ),
@@ -83,7 +88,7 @@ class _ProductDetailsState extends State<ProductDetails> {
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.blue),
+                    icon: Icon(Icons.arrow_back, color: colorScheme.primary),
                     onPressed: () => Navigator.pop(context),
                   ),
                   const SizedBox(width: 10),
@@ -91,10 +96,8 @@ class _ProductDetailsState extends State<ProductDetails> {
                     child: Center(
                       child: Text(
                         'Product',
-                        style: AppWidget.boldTextStyle().copyWith(
-                          fontSize: 30,
-                          color: Colors.blue,
-                          fontFamily: 'Lato',
+                        style: textTheme.headlineSmall?.copyWith(
+                          color: colorScheme.primary,
                           fontWeight: FontWeight.w900,
                         ),
                         maxLines: 1,
@@ -128,17 +131,17 @@ class _ProductDetailsState extends State<ProductDetails> {
           Expanded(
             child: Container(
               width: double.infinity,
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.only(
+              decoration: BoxDecoration(
+                color: colorScheme.surface,
+                borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(30),
                   topRight: Radius.circular(30),
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black12,
+                    color: Colors.black.withOpacity(0.1),
                     blurRadius: 15,
-                    offset: Offset(0, -6),
+                    offset: const Offset(0, -6),
                   ),
                 ],
               ),
@@ -151,9 +154,8 @@ class _ProductDetailsState extends State<ProductDetails> {
                       // Title
                       Text(
                         product['Name'] ?? 'No Name',
-                        style: AppWidget.boldTextStyle().copyWith(
-                          fontSize: 28,
-                          color: Colors.black87,
+                        style: textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
                         ),
                         softWrap: true,
                       ),
@@ -161,18 +163,16 @@ class _ProductDetailsState extends State<ProductDetails> {
                       // Price
                       Text(
                         '₹${product['Price'] ?? '--'}',
-                        style: AppWidget.boldTextStyle().copyWith(
-                          fontSize: 30,
+                        style: textTheme.headlineMedium?.copyWith(
                           fontWeight: FontWeight.w900,
-                          color: Colors.blue,
+                          color: colorScheme.primary,
                         ),
                       ),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 20),
                       // Details heading
                       Text(
                         'Details',
-                        style: GoogleFonts.lato(
-                          fontSize: 22,
+                        style: textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -181,8 +181,7 @@ class _ProductDetailsState extends State<ProductDetails> {
                       Text(
                         product['Description'] ??
                             "No description provided for this product.",
-                        style: GoogleFonts.lato(
-                          fontSize: 16,
+                        style: textTheme.bodyLarge?.copyWith(
                           color: Colors.grey[700],
                           height: 1.5,
                         ),
@@ -199,13 +198,13 @@ class _ProductDetailsState extends State<ProductDetails> {
       // --- Bottom Button ---
       bottomNavigationBar: Container(
         padding: const EdgeInsets.all(20),
-        decoration: const BoxDecoration(
-          color: Colors.white,
+        decoration: BoxDecoration(
+          color: colorScheme.surface,
           boxShadow: [
             BoxShadow(
-              color: Colors.black12,
+              color: Colors.black.withOpacity(0.1),
               blurRadius: 10,
-              offset: Offset(0, -4),
+              offset: const Offset(0, -4),
             ),
           ],
         ),
@@ -214,30 +213,16 @@ class _ProductDetailsState extends State<ProductDetails> {
           width: double.infinity,
           child: ElevatedButton(
             onPressed: _isLoading ? null : _handleAddToCart,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
-              elevation: 6,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-            ),
             child: _isLoading
-                ? const SizedBox(
+                ? SizedBox(
                     width: 24,
                     height: 24,
                     child: CircularProgressIndicator(
-                      color: Colors.white,
+                      color: colorScheme.onPrimary,
                       strokeWidth: 2,
                     ),
                   )
-                : const Text(
-                    "Add to Cart",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 16,
-                    ),
-                  ),
+                : const Text("Add to Cart"),
           ),
         ),
       ),

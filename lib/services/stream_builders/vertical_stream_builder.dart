@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ecommerce_shop/pages/product_details.dart';
 import 'package:ecommerce_shop/services/shimmer/product_skelleton_list_vertical.dart';
-import 'package:ecommerce_shop/widget/support_widget.dart';
 import 'package:flutter/material.dart';
 
 class VerticalProductsList extends StatelessWidget {
@@ -52,6 +51,10 @@ class VerticalProductsList extends StatelessWidget {
 
   // This is the card UI from your DiscoverPage, now part of this widget
   Widget _buildProductCard(BuildContext context, Map<String, dynamic> productData) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+
     final name = productData['Name'] ?? 'Unnamed';
     final price = productData['Price'] ?? 0;
     final image = productData['Image'] ?? '';
@@ -65,23 +68,13 @@ class VerticalProductsList extends StatelessWidget {
           ),
         );
       },
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 5),
-            ),
-          ],
-        ),
+      child: Card(
+        // Using Card widget which respects the theme's cardTheme
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
               child: Image.network(
                 image,
                 height: 180,
@@ -90,7 +83,7 @@ class VerticalProductsList extends StatelessWidget {
                 errorBuilder: (context, error, stackTrace) => Container(
                   height: 180,
                   color: Colors.grey[200],
-                  child: const Icon(Icons.image_not_supported_outlined, color: Colors.grey, size: 40),
+                  child: Icon(Icons.image_not_supported_outlined, color: Colors.grey[400], size: 40),
                 ),
               ),
             ),
@@ -101,15 +94,17 @@ class VerticalProductsList extends StatelessWidget {
                 children: [
                   Text(
                     name,
-                    style: AppWidget.boldTextStyle().copyWith(fontSize: 18),
+                    style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 8),
-
                   Text(
                     '₹$price',
-                    style: AppWidget.boldTextStyle().copyWith(color: Colors.blue, fontSize: 18),
+                    style: textTheme.titleMedium?.copyWith(
+                      color: colorScheme.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ],
               ),

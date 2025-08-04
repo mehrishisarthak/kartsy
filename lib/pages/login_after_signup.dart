@@ -5,7 +5,6 @@ import 'package:ecommerce_shop/services/shared_preferences.dart';
 import 'package:ecommerce_shop/utils/authmethods.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:lottie/lottie.dart';
 
 class LoginPageAfterSignup extends StatefulWidget {
@@ -38,7 +37,7 @@ class _LoginPageAfterSignupState extends State<LoginPageAfterSignup> {
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(
         content: Text(message),
-        backgroundColor: backgroundColor ?? (isError ? Colors.redAccent : Colors.green),
+        backgroundColor: backgroundColor ?? (isError ? Theme.of(context).colorScheme.error : Colors.green),
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 3),
       ));
@@ -133,6 +132,10 @@ class _LoginPageAfterSignupState extends State<LoginPageAfterSignup> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
@@ -140,9 +143,9 @@ class _LoginPageAfterSignupState extends State<LoginPageAfterSignup> {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Colors.lightBlue.shade50,
-              Colors.white,
-              Colors.white,
+              colorScheme.primary.withAlpha(25),
+              colorScheme.surface,
+              colorScheme.surface,
             ],
           ),
         ),
@@ -164,18 +167,16 @@ class _LoginPageAfterSignupState extends State<LoginPageAfterSignup> {
                   Text(
                     "Verify Your Email",
                     textAlign: TextAlign.center,
-                    style: GoogleFonts.poppins(
-                      fontSize: 26,
+                    style: textTheme.headlineMedium?.copyWith(
                       fontWeight: FontWeight.bold,
-                      color: const Color(0xFF0D47A1),
+                      color: colorScheme.primary,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     "A verification link was sent to your email. Please check your inbox and login.",
                     textAlign: TextAlign.center,
-                    style: GoogleFonts.poppins(
-                      fontSize: 16,
+                    style: textTheme.titleMedium?.copyWith(
                       color: Colors.grey[600],
                     ),
                   ),
@@ -219,23 +220,7 @@ class _LoginPageAfterSignupState extends State<LoginPageAfterSignup> {
       keyboardType: keyboardType,
       decoration: InputDecoration(
         hintText: hintText,
-        hintStyle: GoogleFonts.poppins(color: Colors.grey[500]),
         prefixIcon: Icon(icon, color: Colors.grey[500]),
-        filled: true,
-        fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.blue.shade400, width: 2.0),
-        ),
       ),
     );
   }
@@ -246,7 +231,6 @@ class _LoginPageAfterSignupState extends State<LoginPageAfterSignup> {
       obscureText: !_isPasswordVisible,
       decoration: InputDecoration(
         hintText: "Password",
-        hintStyle: GoogleFonts.poppins(color: Colors.grey[500]),
         prefixIcon: Icon(Icons.lock_outline, color: Colors.grey[500]),
         suffixIcon: IconButton(
           icon: Icon(
@@ -259,65 +243,20 @@ class _LoginPageAfterSignupState extends State<LoginPageAfterSignup> {
             });
           },
         ),
-        filled: true,
-        fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.blue.shade400, width: 2.0),
-        ),
       ),
     );
   }
 
   Widget _buildLoginButton() {
-    return Container(
+    return SizedBox(
       height: 55,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF42A5F5), Color(0xFF1976D2)],
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.blue.withOpacity(0.3),
-            spreadRadius: 1,
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
       child: ElevatedButton(
         onPressed: _isLoading ? null : _handleLogin,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.transparent,
-          shadowColor: Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
         child: _isLoading
-            ? const CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+            ? CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Theme.of(context).colorScheme.onPrimary),
               )
-            : Text(
-                "Login",
-                style: GoogleFonts.poppins(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                ),
-              ),
+            : const Text("Login"),
       ),
     );
   }
@@ -328,7 +267,7 @@ class _LoginPageAfterSignupState extends State<LoginPageAfterSignup> {
         onPressed: _isLoading ? null : _resendVerificationEmail,
         child: Text(
           "Didn't get an email? Resend",
-          style: GoogleFonts.poppins(
+          style: TextStyle(
             color: Colors.deepOrange.shade600,
             fontWeight: FontWeight.w600,
           ),
@@ -338,12 +277,15 @@ class _LoginPageAfterSignupState extends State<LoginPageAfterSignup> {
   }
 
   Widget _buildSignupLink() {
+    final textTheme = Theme.of(context).textTheme;
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Text(
           "Want to use a different account?",
-          style: GoogleFonts.poppins(fontSize: 15, color: Colors.grey[700]),
+          style: textTheme.bodyMedium?.copyWith(color: Colors.grey[700]),
         ),
         TextButton(
           onPressed: () {
@@ -354,10 +296,9 @@ class _LoginPageAfterSignupState extends State<LoginPageAfterSignup> {
           },
           child: Text(
             "Sign Up",
-            style: GoogleFonts.poppins(
-              color: const Color(0xFF1976D2),
+            style: textTheme.bodyMedium?.copyWith(
+              color: colorScheme.primary,
               fontWeight: FontWeight.bold,
-              fontSize: 15,
             ),
           ),
         )

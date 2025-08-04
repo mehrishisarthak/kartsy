@@ -1,5 +1,5 @@
-import 'package:ecommerce_shop/pages/home.dart';
 import 'package:ecommerce_shop/pages/cart.dart';
+import 'package:ecommerce_shop/pages/home.dart';
 import 'package:ecommerce_shop/services/shared_preferences.dart';
 import 'package:flutter/material.dart';
 
@@ -45,6 +45,9 @@ class _BottomBarState extends State<BottomBar> {
       );
     }
 
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Scaffold(
       // IndexedStack keeps all pages in the widget tree, preserving their state.
       body: IndexedStack(
@@ -59,8 +62,8 @@ class _BottomBarState extends State<BottomBar> {
           });
         },
         type: BottomNavigationBarType.fixed, // Ensures background color is applied
-        backgroundColor: Colors.white,
-        selectedItemColor: Colors.blue,
+        backgroundColor: colorScheme.surface,
+        selectedItemColor: colorScheme.primary,
         unselectedItemColor: Colors.grey[600],
         selectedFontSize: 14,
         unselectedFontSize: 12,

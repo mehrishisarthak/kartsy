@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ecommerce_shop/pages/product_details.dart';
 import 'package:ecommerce_shop/services/shimmer/product_skelleton_list_horizontal.dart';
-import 'package:ecommerce_shop/widget/support_widget.dart';
 import 'package:flutter/material.dart';
 
 class HorizontalProductsList extends StatelessWidget {
@@ -10,6 +9,10 @@ class HorizontalProductsList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+
     return SizedBox(
       height: 260,
       child: StreamBuilder<QuerySnapshot>(
@@ -56,12 +59,12 @@ class HorizontalProductsList extends StatelessWidget {
                 child: Container(
                   width: 160,
                   decoration: BoxDecoration(
-                    color: Colors.white,
-                    border: Border.all(color: Colors.blue.shade200, width: 1.5),
+                    color: colorScheme.surface,
+                    border: Border.all(color: colorScheme.primary.withOpacity(0.3), width: 1.5),
                     borderRadius: BorderRadius.circular(10),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.grey.withOpacity(0.1),
+                        color: Colors.black.withOpacity(0.05),
                         spreadRadius: 1,
                         blurRadius: 5,
                       )
@@ -86,7 +89,7 @@ class HorizontalProductsList extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(horizontal: 8.0),
                         child: Text(
                           name,
-                          style: AppWidget.boldTextStyle().copyWith(fontSize: 16),
+                          style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -96,10 +99,9 @@ class HorizontalProductsList extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(horizontal: 8.0),
                         child: Text(
                           '₹$price',
-                          style: AppWidget.lightTextStyle().copyWith(
-                            color: Colors.blue,
+                          style: textTheme.titleMedium?.copyWith(
+                            color: colorScheme.primary,
                             fontWeight: FontWeight.bold,
-                            fontSize: 17,
                           ),
                         ),
                       ),

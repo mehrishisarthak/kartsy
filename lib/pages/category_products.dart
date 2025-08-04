@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ecommerce_shop/services/stream_builders/vertical_stream_builder.dart';
 import 'package:ecommerce_shop/utils/database.dart';
-import 'package:ecommerce_shop/widget/support_widget.dart';
 import 'package:flutter/material.dart';
 
 class CategoryProducts extends StatefulWidget {
@@ -17,23 +16,26 @@ class _CategoryProductsState extends State<CategoryProducts> {
 
   getOnTheLoad() async {
     listings = await DatabaseMethods().getListings(widget.category);
-    setState(() {});
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   @override
   void initState() {
-    getOnTheLoad();
     super.initState();
+    getOnTheLoad();
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FB),
+      // AppBar now uses the theme's AppBarTheme
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 4,
-        centerTitle: true,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(
             bottom: Radius.circular(30),
@@ -41,12 +43,13 @@ class _CategoryProductsState extends State<CategoryProducts> {
         ),
         title: Text(
           widget.category,
-          style: AppWidget.boldTextStyle().copyWith(
-            color: Colors.blue,
-            fontSize: 24,
+          style: textTheme.titleLarge?.copyWith(
+            color: colorScheme.primary,
+            fontWeight: FontWeight.bold,
           ),
         ),
       ),
+      // The body will display the list of products
       body: VerticalProductsList(
         stream: listings ?? const Stream.empty(),
       ),
