@@ -6,7 +6,8 @@ class SharedPreferenceHelper {
   static String userNamekey = "USERNAMEKEY";
   static String userEmailkey = "USEREMAILKEY";
   static String userImagekey = "USERIMAGEKEY";
-  static String userAddressKey = "USERADDRESSKEY"; // New key for the address
+  static String userAddressKey = "USERADDRESSKEY";
+  static String themeKey = "THEMEKEY"; // Key for theme preference
 
   Future<bool> saveUserId(String getUserID) async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -28,11 +29,16 @@ class SharedPreferenceHelper {
     return await prefs.setString(userImagekey, getUserImage);
   }
 
-  /// Encodes a Map to a JSON string and saves it.
   Future<bool> saveUserAddress(Map<String, dynamic> address) async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     String addressJson = json.encode(address);
     return await prefs.setString(userAddressKey, addressJson);
+  }
+
+  /// Saves the theme preference (true for dark, false for light).
+  Future<bool> saveTheme(bool isDarkMode) async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    return await prefs.setBool(themeKey, isDarkMode);
   }
 
   Future<String?> getUserID() async {
@@ -55,7 +61,6 @@ class SharedPreferenceHelper {
     return prefs.getString(userImagekey);
   }
 
-  /// Retrieves the JSON string and decodes it back to a Map.
   Future<Map<String, dynamic>?> getUserAddress() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     String? addressJson = prefs.getString(userAddressKey);
@@ -65,6 +70,12 @@ class SharedPreferenceHelper {
     return null;
   }
 
+  /// Retrieves the theme preference. Defaults to false (light mode).
+  Future<bool> getTheme() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(themeKey) ?? false;
+  }
+
   /// Clears all saved user data from SharedPreferences.
   Future<void> clearUserInfo() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -72,6 +83,7 @@ class SharedPreferenceHelper {
     await prefs.remove(userNamekey);
     await prefs.remove(userEmailkey);
     await prefs.remove(userImagekey);
-    await prefs.remove(userAddressKey); // Also clear the address
+    await prefs.remove(userAddressKey);
+    await prefs.remove(themeKey); // Also clear the theme
   }
 }

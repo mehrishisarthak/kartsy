@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ecommerce_shop/pages/admin_login.dart';
+import 'package:ecommerce_shop/pages/settings.dart';
 import 'package:ecommerce_shop/services/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -386,6 +387,9 @@ class _ProfilePageState extends State<ProfilePage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF7F9FB),
       appBar: AppBar(
+        actions: [
+          IconButton(icon: const Icon(Icons.settings, color: Colors.blue), onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const SettingsPage()))),
+        ],
         leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.blue), onPressed: () => Navigator.pop(context)),
         title: Text("Edit Profile", style: TextStyle(color: Colors.blue[700], fontWeight: FontWeight.bold)),
         centerTitle: true,

@@ -40,6 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
   /// A single, safe function to load all necessary data when the screen starts.
   Future<void> _initializeData() async {
     uid = await SharedPreferenceHelper().getUserID();
+    
 
     if (uid != null) {
       // Run both data loading operations concurrently for speed

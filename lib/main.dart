@@ -1,6 +1,8 @@
 import 'package:ecommerce_shop/firebase_options.dart';
 import 'package:ecommerce_shop/pages/onboarding.dart';
 import 'package:ecommerce_shop/services/cart_provider.dart';
+import 'package:ecommerce_shop/theme/theme_data.dart';
+import 'package:ecommerce_shop/theme/theme_provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_app_check/firebase_app_check.dart'; // 1. Add this import
 import 'package:flutter/material.dart';
@@ -26,6 +28,7 @@ void main() async {
       MultiProvider(
         providers: [
           ChangeNotifierProvider(create: (_) => CartProvider()),
+          ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ],
         child: const MyApp(),
       ),
@@ -43,10 +46,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Kartsy',
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-      ),
+      theme: Provider.of<ThemeProvider>(context).themeData,
       home: const Onboarding(), // or LoginPage(), etc.
     );
   }
