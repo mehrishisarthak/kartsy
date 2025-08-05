@@ -1,27 +1,41 @@
+// lib/providers/theme_provider.dart
+
 import 'package:ecommerce_shop/services/shared_preferences.dart';
-import 'package:ecommerce_shop/theme/theme_data.dart';
 import 'package:flutter/material.dart';
 
 class ThemeProvider with ChangeNotifier {
-  ThemeData _themeData = lightMode;
+  // The state is now a ThemeMode, defaulting to system
+  ThemeMode _themeMode = ThemeMode.system;
   final SharedPreferenceHelper _prefs = SharedPreferenceHelper();
 
-  ThemeData get themeData => _themeData;
+  // Getter for the current theme mode
+  ThemeMode get themeMode => _themeMode;
 
   ThemeProvider() {
     _loadTheme();
   }
 
   void _loadTheme() async {
-    bool isDarkMode = await _prefs.getTheme();
-    _themeData = isDarkMode ? darkMode : lightMode;
+    // Get the saved theme string ('system', 'light', 'dark')
+    final String? savedTheme = await _prefs.getThemeMode();
+
+    if (savedTheme == null) {
+      _themeMode = ThemeMode.system; // Default if nothing is saved
+    } else if (savedTheme == 'light') {
+      _themeMode = ThemeMode.light;
+    } else if (savedTheme == 'dark') {
+      _themeMode = ThemeMode.dark;
+    } else {
+      _themeMode = ThemeMode.system;
+    }
     notifyListeners();
   }
 
-  void toggleTheme() async {
-    bool isDarkMode = _themeData.brightness == Brightness.light;
-    _themeData = isDarkMode ? darkMode : lightMode;
-    await _prefs.saveTheme(isDarkMode);
+  // A new method to explicitly set the theme
+  void setThemeMode(ThemeMode mode) async {
+    _themeMode = mode;
+    // Save the theme mode using its string name (e.g., 'system')
+    await _prefs.saveThemeMode(mode.name);
     notifyListeners();
   }
 }

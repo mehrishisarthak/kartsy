@@ -2,12 +2,34 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SharedPreferenceHelper {
+  // User data keys (unchanged)
   static String userIdkey = "USERKEY";
   static String userNamekey = "USERNAMEKEY";
   static String userEmailkey = "USEREMAILKEY";
   static String userImagekey = "USERIMAGEKEY";
   static String userAddressKey = "USERADDRESSKEY";
-  static String themeKey = "THEMEKEY"; // Key for theme preference
+
+  // NEW: Updated key for theme preference. Using a new key name is safer
+  // to avoid conflicts with old boolean values if users update your app.
+  static const String themeModeKey = "THEMEMODEKEY";
+
+  // --- Theme Methods (UPDATED) ---
+
+  /// Saves the theme mode as a String ('system', 'light', or 'dark').
+  Future<void> saveThemeMode(String mode) async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setString(themeModeKey, mode);
+  }
+
+  /// Retrieves the saved theme mode String.
+  /// Returns null if no theme has been saved yet.
+  Future<String?> getThemeMode() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    return prefs.getString(themeModeKey);
+  }
+
+
+  // --- User Data Methods (Unchanged) ---
 
   Future<bool> saveUserId(String getUserID) async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -33,12 +55,6 @@ class SharedPreferenceHelper {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     String addressJson = json.encode(address);
     return await prefs.setString(userAddressKey, addressJson);
-  }
-
-  /// Saves the theme preference (true for dark, false for light).
-  Future<bool> saveTheme(bool isDarkMode) async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    return await prefs.setBool(themeKey, isDarkMode);
   }
 
   Future<String?> getUserID() async {
@@ -70,12 +86,6 @@ class SharedPreferenceHelper {
     return null;
   }
 
-  /// Retrieves the theme preference. Defaults to false (light mode).
-  Future<bool> getTheme() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(themeKey) ?? false;
-  }
-
   /// Clears all saved user data from SharedPreferences.
   Future<void> clearUserInfo() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -84,6 +94,8 @@ class SharedPreferenceHelper {
     await prefs.remove(userEmailkey);
     await prefs.remove(userImagekey);
     await prefs.remove(userAddressKey);
-    // we keep theme preference intact
+    // We keep the theme preference intact when clearing user info.
   }
+
+  // NOTE: The old `saveTheme(bool)` and `getTheme()` methods have been removed.
 }

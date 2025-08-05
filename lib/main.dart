@@ -1,9 +1,10 @@
 import 'package:ecommerce_shop/firebase_options.dart';
 import 'package:ecommerce_shop/pages/onboarding.dart';
 import 'package:ecommerce_shop/services/cart_provider.dart';
+import 'package:ecommerce_shop/theme/theme_data.dart'; // 1. ADD THIS IMPORT for your custom themes
 import 'package:ecommerce_shop/theme/theme_provider.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_app_check/firebase_app_check.dart'; // 1. Add this import
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 import 'package:provider/provider.dart';
@@ -16,13 +17,12 @@ void main() async {
       options: DefaultFirebaseOptions.currentPlatform,
     );
 
-    // 2. Activate App Check
+    // Activate App Check
     await FirebaseAppCheck.instance.activate(
-      // Use the debug provider for local testing
-      androidProvider: AndroidProvider.debug, 
+      androidProvider: AndroidProvider.debug,
       appleProvider: AppleProvider.debug,
     );
-    
+
     runApp(
       MultiProvider(
         providers: [
@@ -42,15 +42,24 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Get the ThemeProvider instance
+    final themeProvider = Provider.of<ThemeProvider>(context);
+
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Kartsy',
-      theme: Provider.of<ThemeProvider>(context).themeData,
-      home: const Onboarding(), // or LoginPage(), etc.
+      // 2. DEFINE your light theme
+      theme: lightMode,
+      // 3. DEFINE your dark theme
+      darkTheme: darkMode,
+      // 4. LET THE PROVIDER control which theme is active
+      themeMode: themeProvider.themeMode,
+      home: const Onboarding(),
     );
   }
 }
 
+// No changes needed in FirebaseErrorApp
 class FirebaseErrorApp extends StatelessWidget {
   const FirebaseErrorApp({super.key});
 
@@ -65,8 +74,8 @@ class FirebaseErrorApp extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Lottie.asset('images/error.json', width: 200, height: 200),
-              SizedBox(height: 20),
-              Text(
+              const SizedBox(height: 20),
+              const Text(
                 'Server Initialization Failed',
                 style: TextStyle(fontSize: 24, color: Colors.red),
                 textAlign: TextAlign.center,
