@@ -54,7 +54,7 @@ class MyApp extends StatelessWidget {
       darkTheme: darkMode,
       // 4. LET THE PROVIDER control which theme is active
       themeMode: themeProvider.themeMode,
-      home: const Onboarding(),
+      home: const OnboardingScreen(),
     );
   }
 }
