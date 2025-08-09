@@ -3,23 +3,21 @@ import 'package:ecommerce_shop/pages/home.dart';
 import 'package:ecommerce_shop/services/shared_preferences.dart';
 import 'package:flutter/material.dart';
 
+// CHANGED: Standard naming convention
 class BottomBar extends StatefulWidget {
   const BottomBar({super.key});
 
   @override
+  // CHANGED: Standard createState implementation
   State<BottomBar> createState() => _BottomBarState();
 }
 
+// CHANGED: Standard State class naming
 class _BottomBarState extends State<BottomBar> {
   int currentIndex = 0;
-  String? userId;
+  // This list will be initialized once, later on.
+  late final List<Widget> pages;
   bool isLoading = true;
-
-  // The list of pages is defined once to preserve state.
-  final List<Widget> pages = [
-    const HomeScreen(),
-    const CartPage(),
-  ];
 
   @override
   void initState() {
@@ -29,9 +27,17 @@ class _BottomBarState extends State<BottomBar> {
 
   Future<void> _loadUserId() async {
     final id = await SharedPreferenceHelper().getUserID();
+
+    // CHANGED: Initialize the pages list here, only once.
+    // It will now persist across rebuilds caused by tab switching.
+    pages = [
+      HomeScreen(userId: id),
+      CartPage(userId: id),
+    ];
+
     if (mounted) {
       setState(() {
-        userId = id;
+        // We no longer need to set a userId variable here.
         isLoading = false;
       });
     }
@@ -44,15 +50,17 @@ class _BottomBarState extends State<BottomBar> {
         body: Center(child: CircularProgressIndicator()),
       );
     }
+    
+    // The 'pages' list is no longer defined here. It's now a class member
+    // that has already been initialized.
 
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      // IndexedStack keeps all pages in the widget tree, preserving their state.
       body: IndexedStack(
         index: currentIndex,
-        children: pages,
+        children: pages, // Using the persistent list of pages
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: currentIndex,
@@ -61,7 +69,7 @@ class _BottomBarState extends State<BottomBar> {
             currentIndex = index;
           });
         },
-        type: BottomNavigationBarType.fixed, // Ensures background color is applied
+        type: BottomNavigationBarType.fixed,
         backgroundColor: colorScheme.surface,
         selectedItemColor: colorScheme.primary,
         unselectedItemColor: Colors.grey[600],

@@ -8,7 +8,9 @@ import 'package:lottie/lottie.dart';
 import 'package:provider/provider.dart';
 
 class CartPage extends StatefulWidget {
-  const CartPage({super.key});
+  const CartPage({super.key, required this.userId});
+
+  final String? userId;
 
   @override
   State<CartPage> createState() => _CartPageState();
@@ -21,12 +23,7 @@ class _CartPageState extends State<CartPage> {
   @override
   void initState() {
     super.initState();
-    _fetchUserId();
-  }
-
-  Future<void> _fetchUserId() async {
-    userID = await SharedPreferenceHelper().getUserID();
-    if (mounted) setState(() {});
+    userID = widget.userId;
   }
 
   void _showSnackBar(String message, {bool isError = false}) {

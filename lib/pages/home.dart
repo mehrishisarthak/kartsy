@@ -9,7 +9,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({super.key, required this.userId});
+
+  final String? userId;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -33,20 +35,18 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    uid = widget.userId;
     _initializeData();
   }
 
   /// A single, safe function to load all necessary data when the screen starts.
   Future<void> _initializeData() async {
-    uid = await SharedPreferenceHelper().getUserID();
     
-    if (uid != null) {
       // Run both data loading operations concurrently for speed
       await Future.wait([
         _loadUserData(uid!),
         _loadCartData(uid!),
       ]);
-    }
 
     if (mounted) {
       setState(() {
