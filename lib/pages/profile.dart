@@ -10,7 +10,9 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 class ProfilePage extends StatefulWidget {
-  const ProfilePage({super.key});
+  const ProfilePage({super.key, required this.userId});
+
+  final String? userId;
 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
@@ -75,10 +77,12 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _isPhoneVerified = false;
   String? _verificationId;
   String _verifiedPhoneNumber = '';
+  String? userID = '';
 
   @override
   void initState() {
     super.initState();
+    userID = widget.userId;
     loadUserData();
     _mobileController.addListener(() {
       if (_isPhoneVerified && '+91${_mobileController.text.trim()}' != _verifiedPhoneNumber) {
@@ -106,8 +110,6 @@ class _ProfilePageState extends State<ProfilePage> {
         _updateAddressFields(cachedAddress);
       }
 
-      final userID = await _prefs.getUserID();
-      if (userID != null) {
         final doc = await FirebaseFirestore.instance.collection('users').doc(userID).get();
         if (doc.exists && mounted) {
           final firestoreData = doc.data()!;
@@ -119,7 +121,7 @@ class _ProfilePageState extends State<ProfilePage> {
             _updateAddressFields(address);
           }
         }
-      }
+      
     } catch (e) {
       // ignore: avoid_print
       print("Error loading user data: $e");

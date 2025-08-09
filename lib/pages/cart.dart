@@ -139,7 +139,7 @@ class _CartPageState extends State<CartPage> {
         address['mobile'] == null || (address['mobile'] as String).isEmpty) {
       _showSnackBar("Please complete your profile address first.", isError: true);
       // ignore: use_build_context_synchronously
-      Navigator.of(context).push(MaterialPageRoute(builder: (context) => const ProfilePage()));
+      Navigator.of(context).push(MaterialPageRoute(builder: (context) => ProfilePage(userId: userID!)));
       return;
     }
 
