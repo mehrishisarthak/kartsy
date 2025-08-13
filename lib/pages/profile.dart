@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ecommerce_shop/pages/admin_login.dart';
+import 'package:ecommerce_shop/pages/order_screen.dart';
 import 'package:ecommerce_shop/pages/settings.dart';
 import 'package:ecommerce_shop/services/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -20,7 +21,6 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   // --- State Variables ---
-  // Made static const for memory efficiency (compile-time constant)
   static const Map<String, List<String>> indianStatesAndCities = {
     'Andaman and Nicobar Islands': ['Port Blair', 'Garacharma', 'Bambooflat'],
     'Andhra Pradesh': ['Visakhapatnam', 'Vijayawada', 'Guntur', 'Tirupati', 'Nellore', 'Kurnool', 'Rajahmundry', 'Kakinada', 'Anantapur', 'Eluru', 'Kadapa', 'Chittoor', 'Srikakulam'],
@@ -110,18 +110,17 @@ class _ProfilePageState extends State<ProfilePage> {
         _updateAddressFields(cachedAddress);
       }
 
-        final doc = await FirebaseFirestore.instance.collection('users').doc(userID).get();
-        if (doc.exists && mounted) {
-          final firestoreData = doc.data()!;
-          setState(() {
-            personData = firestoreData;
-          });
-          final address = firestoreData['Address'];
-          if (address is Map<String, dynamic>) {
-            _updateAddressFields(address);
-          }
+      final doc = await FirebaseFirestore.instance.collection('users').doc(userID).get();
+      if (doc.exists && mounted) {
+        final firestoreData = doc.data()!;
+        setState(() {
+          personData = firestoreData;
+        });
+        final address = firestoreData['Address'];
+        if (address is Map<String, dynamic>) {
+          _updateAddressFields(address);
         }
-      
+      }
     } catch (e) {
       // ignore: avoid_print
       print("Error loading user data: $e");
@@ -211,7 +210,7 @@ class _ProfilePageState extends State<ProfilePage> {
               _showErrorSnackBar("Failed to link credential: ${e.toString()}");
             }
           } finally {
-             if (mounted) setState(() => _isLoading = false);
+              if (mounted) setState(() => _isLoading = false);
           }
         },
         verificationFailed: (FirebaseAuthException e) {
@@ -236,7 +235,7 @@ class _ProfilePageState extends State<ProfilePage> {
         },
       );
     } catch (e) {
-        if (mounted) _showErrorSnackBar("An error occurred. Please try again.");
+      if (mounted) _showErrorSnackBar("An error occurred. Please try again.");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -383,6 +382,19 @@ class _ProfilePageState extends State<ProfilePage> {
     return Scaffold(
       appBar: AppBar(
         actions: [
+          // New orders button
+          IconButton(
+            icon: const Icon(Icons.shopping_bag_outlined),
+            onPressed: () {
+              if (widget.userId != null) {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (context) => UserOrdersPage(userId: widget.userId!)),
+                );
+              } else {
+                _showErrorSnackBar("User ID not found. Please log in.");
+              }
+            },
+          ),
           IconButton(icon: const Icon(Icons.settings), onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const SettingsPage()))),
         ],
         leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.pop(context)),
@@ -435,14 +447,14 @@ class _ProfilePageState extends State<ProfilePage> {
                               hintText: "98765 43210",
                               prefixIcon: Icon(Icons.phone_android, color: colorScheme.primary),
                               prefixText: "+91 ",
-                              fillColor: _isPhoneVerified ? Colors.grey.shade200.withAlpha((0.5 * 255).toInt()) : null,
+                              fillColor: _isPhoneVerified ? Colors.grey.shade200.withAlpha(128) : null,
                               suffixIcon: TextButton(
                                 onPressed: _isPhoneVerified ? null : _verifyPhoneNumber,
                                 child: _isLoading
                                     ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
                                     : _isPhoneVerified 
-                                      ? Row(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.check_circle, color: Colors.green), const SizedBox(width: 4), Text("Verified", style: TextStyle(color: colorScheme.onSurface))])
-                                      : Text("Verify", style: TextStyle(color: colorScheme.primary)),
+                                        ? Row(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.check_circle, color: Colors.green), const SizedBox(width: 4), Text("Verified", style: TextStyle(color: colorScheme.onSurface))])
+                                        : Text("Verify", style: TextStyle(color: colorScheme.primary)),
                               ),
                             ),
                           ),

@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:ecommerce_shop/pages/order_screen.dart';
 import 'package:ecommerce_shop/pages/profile.dart';
 import 'package:ecommerce_shop/services/cart_provider.dart';
 import 'package:ecommerce_shop/services/shared_preferences.dart';
@@ -52,12 +53,24 @@ class _CartPageState extends State<CartPage> {
     }
   }
 
-  /// Handles quantity updates with a Firestore Transaction.
+  /// Handles quantity updates with a Firestore Transaction and inventory check.
   Future<void> updateItemQuantity(String itemId, int delta) async {
     if (userID == null) return;
-
-    final docRef = FirebaseFirestore.instance.collection('users').doc(userID).collection('cart').doc(itemId);
+    
     final cartProvider = Provider.of<CartProvider>(context, listen: false);
+    final itemInCart = cartProvider.cart.firstWhere((item) => item['id'] == itemId, orElse: () => {});
+
+    // Check if the item exists in the cart and has an inventory value
+    final int currentLocalQuantity = itemInCart['quantity'] as int? ?? 0;
+    final int? productInventory = itemInCart['inventory'] as int?;
+
+    // If increasing quantity, check if there's enough stock
+    if (delta > 0 && (productInventory != null && currentLocalQuantity >= productInventory)) {
+      _showSnackBar('Maximum stock reached for this item.', isError: true);
+      return;
+    }
+    
+    final docRef = FirebaseFirestore.instance.collection('users').doc(userID).collection('cart').doc(itemId);
 
     try {
       await FirebaseFirestore.instance.runTransaction((transaction) async {
@@ -78,16 +91,10 @@ class _CartPageState extends State<CartPage> {
       });
 
       if (mounted) {
-        final itemInCart = cartProvider.cart.any((item) => item['id'] == itemId);
-        if (!itemInCart) return;
-
-        final currentLocalQuantity = cartProvider.cart.firstWhere((item) => item['id'] == itemId)['quantity'] as int;
-        final newLocalQuantity = currentLocalQuantity + delta;
-        
-        if (newLocalQuantity > 0) {
-          cartProvider.updateQuantity(itemId, delta);
-        } else {
+        if (delta < 0 && currentLocalQuantity <= 1) {
           cartProvider.removeFromCart(itemId);
+        } else {
+          cartProvider.updateQuantity(itemId, delta);
         }
       }
     } catch (e) {
@@ -108,7 +115,7 @@ class _CartPageState extends State<CartPage> {
     try {
       await FirebaseFirestore.instance.collection('users').doc(userID).collection('cart').doc(itemId).delete();
     } catch (e) {
-      if(mounted) {
+      if (mounted) {
         cartProvider.addItemAt(originalIndex, originalItem);
         _showSnackBar('Could not remove item. Please try again.', isError: true);
       }
@@ -138,8 +145,9 @@ class _CartPageState extends State<CartPage> {
         address['pincode'] == null || (address['pincode'] as String).isEmpty ||
         address['mobile'] == null || (address['mobile'] as String).isEmpty) {
       _showSnackBar("Please complete your profile address first.", isError: true);
-      // ignore: use_build_context_synchronously
-      Navigator.of(context).push(MaterialPageRoute(builder: (context) => ProfilePage(userId: userID!)));
+      if (mounted) {
+        Navigator.of(context).push(MaterialPageRoute(builder: (context) => ProfilePage(userId: userID!)));
+      }
       return;
     }
 
@@ -160,10 +168,10 @@ class _CartPageState extends State<CartPage> {
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
 
-    final total = cart.fold<double>(0, (sum, item) {
+    final total = cart.fold<double>(0, (summation, item) {
       final price = item['Price'] as num? ?? 0;
       final quantity = item['quantity'] as num? ?? 0;
-      return sum + (price * quantity);
+      return summation + (price * quantity);
     });
 
     return Scaffold(
@@ -174,20 +182,38 @@ class _CartPageState extends State<CartPage> {
             color: colorScheme.surface,
             borderRadius: const BorderRadius.vertical(bottom: Radius.circular(30)),
             boxShadow: [
-              BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 12, offset: const Offset(0, 4))
+              BoxShadow(color: Colors.black.withAlpha(25), blurRadius: 12, offset: const Offset(0, 4))
             ],
           ),
           child: SafeArea(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Center(
-                child: Text(
-                  'Cart',
-                  style: textTheme.headlineMedium?.copyWith(
-                        color: colorScheme.primary,
-                        fontWeight: FontWeight.w900,
-                      ),
-                ),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Text(
+                    'Cart',
+                    style: textTheme.headlineMedium?.copyWith(
+                      color: colorScheme.primary,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  Positioned(
+                    right: 0,
+                    child: IconButton(
+                      icon: Icon(Icons.shopping_bag_outlined, color: colorScheme.primary),
+                      onPressed: () {
+                        if (widget.userId != null) {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(builder: (context) => UserOrdersPage(userId: widget.userId!)),
+                          );
+                        } else {
+                          _showSnackBar("User ID not found. Please log in.", isError: true);
+                        }
+                      },
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -213,102 +239,117 @@ class _CartPageState extends State<CartPage> {
                   ],
                 ),
               )
-            : Stack(
+            : Column(
                 children: [
-                  ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 230),
-                    itemCount: cart.length,
-                    itemBuilder: (context, index) {
-                      final item = cart[index];
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 16),
-                        child: Row(
-                          children: [
-                            ClipRRect(
-                              borderRadius: const BorderRadius.only(
-                                topLeft: Radius.circular(12),
-                                bottomLeft: Radius.circular(12),
-                              ),
-                              child: Image.network(
-                                item['Image'] ?? '',
-                                width: 120,
-                                height: 120,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, size: 80),
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      item['Name'] ?? 'No Name',
-                                      style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      '₹${item['Price']}',
-                                      style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: colorScheme.primary),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Row(
-                                      children: [
-                                        _buildQuantityButton(
-                                          icon: Icons.remove,
-                                          onPressed: () => _handleCartInteraction(() => updateItemQuantity(item['id'], -1)),
-                                        ),
-                                        Padding(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                                          child: Text('${item['quantity']}', style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                                        ),
-                                        _buildQuantityButton(
-                                          icon: Icons.add,
-                                          onPressed: () => _handleCartInteraction(() => updateItemQuantity(item['id'], 1)),
-                                        ),
-                                        const Spacer(),
-                                        IconButton(
-                                          icon: Icon(Icons.delete_outline, color: colorScheme.error),
-                                          onPressed: () => _handleCartInteraction(() => removeItem(item['id'])),
-                                        ),
-                                      ],
-                                    )
-                                  ],
+                  Expanded(
+                    child: ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                      itemCount: cart.length,
+                      itemBuilder: (context, index) {
+                        final item = cart[index];
+                        final int inventory = int.tryParse(item['inventory']?.toString() ?? '0') ?? 0;
+
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 16),
+                          child: Row(
+                            children: [
+                              ClipRRect(
+                                borderRadius: const BorderRadius.only(
+                                  topLeft: Radius.circular(12),
+                                  bottomLeft: Radius.circular(12),
+                                ),
+                                child: Image.network(
+                                  item['Image'] ?? '',
+                                  width: 120,
+                                  height: 120,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, size: 80),
                                 ),
                               ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        item['Name'] ?? 'No Name',
+                                        style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        '₹${item['Price']}',
+                                        style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: colorScheme.primary),
+                                      ),
+                                      if (inventory < 10) // Display a warning if inventory is low
+                                        Padding(
+                                          padding: const EdgeInsets.only(top: 4.0),
+                                          child: Text(
+                                            inventory > 0 ? 'Only $inventory left!' : 'Out of Stock',
+                                            style: textTheme.bodySmall?.copyWith(
+                                              color: inventory > 0 ? Colors.orange : colorScheme.error,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      const SizedBox(height: 8),
+                                      Row(
+                                        children: [
+                                          _buildQuantityButton(
+                                            icon: Icons.remove,
+                                            onPressed: () => _handleCartInteraction(() => updateItemQuantity(item['id'], -1)),
+                                          ),
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                                            child: Text('${item['quantity']}', style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                                          ),
+                                          _buildQuantityButton(
+                                            icon: Icons.add,
+                                            onPressed: () => _handleCartInteraction(() => updateItemQuantity(item['id'], 1)),
+                                            isEnabled: inventory > 0 && (item['quantity'] as int) < inventory,
+                                          ),
+                                          const Spacer(),
+                                          IconButton(
+                                            icon: Icon(Icons.delete_outline, color: colorScheme.error),
+                                            onPressed: () => _handleCartInteraction(() => removeItem(item['id'])),
+                                          ),
+                                        ],
+                                      )
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
                   ),
-                  Positioned(
-                    bottom: 90,
-                    left: 0,
-                    right: 0,
-                    child: _buildCheckoutSection(total),
-                  ),
+                  // Checkout section is now at the bottom of the Column
+                  _buildCheckoutSection(total),
                 ],
               ),
       ),
     );
   }
 
-  Widget _buildQuantityButton({required IconData icon, required VoidCallback onPressed}) {
+  Widget _buildQuantityButton({required IconData icon, required VoidCallback onPressed, bool isEnabled = true}) {
     return InkWell(
-      onTap: onPressed,
+      onTap: isEnabled ? onPressed : null,
       borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.all(4),
-        decoration: BoxDecoration(
-          color: Colors.grey.shade200,
-          shape: BoxShape.circle,
+      child: Opacity(
+        opacity: isEnabled ? 1.0 : 0.5,
+        child: Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade200,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, size: 18),
         ),
-        child: Icon(icon, size: 18),
       ),
     );
   }
@@ -319,11 +360,11 @@ class _CartPageState extends State<CartPage> {
     final textTheme = theme.textTheme;
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20),
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: colorScheme.surface,
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 20, offset: const Offset(0, -10))],
+        boxShadow: [BoxShadow(color: Colors.black.withAlpha(25), blurRadius: 20, offset: const Offset(0, -10))],
         borderRadius: BorderRadius.circular(20),
       ),
       child: Column(

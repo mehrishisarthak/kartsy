@@ -74,6 +74,8 @@ class _HomeScreenState extends State<HomeScreen> {
           'Image': data['Image'] ?? '',
           'adminId': data['adminId'],
           'category': data['category'],
+          'description': data['description'],
+          'inventory': data['inventory'],
         };
       }).toList();
 

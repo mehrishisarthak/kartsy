@@ -23,6 +23,7 @@ class _AddProductState extends State<AddProduct> {
   late TextEditingController _productNameController;
   late TextEditingController _productDescriptionController;
   late TextEditingController _productPriceController;
+  late TextEditingController _productInventoryController;
 
   @override
   void initState() {
@@ -30,6 +31,7 @@ class _AddProductState extends State<AddProduct> {
     _productNameController = TextEditingController();
     _productDescriptionController = TextEditingController();
     _productPriceController = TextEditingController();
+    _productInventoryController = TextEditingController();
   }
 
   @override
@@ -37,6 +39,7 @@ class _AddProductState extends State<AddProduct> {
     _productNameController.dispose();
     _productDescriptionController.dispose();
     _productPriceController.dispose();
+    _productInventoryController.dispose();
     super.dispose();
   }
 
@@ -64,12 +67,22 @@ class _AddProductState extends State<AddProduct> {
   }
 
   Future<void> _uploadItem() async {
+    // Basic validation for empty fields and image
     if (selectedImage == null ||
         _productNameController.text.trim().isEmpty ||
         _productDescriptionController.text.trim().isEmpty ||
         _productPriceController.text.trim().isEmpty ||
+        _productInventoryController.text.trim().isEmpty ||
         selectedCategory == null) {
       _showSnackBar('Please fill all the details and select an image.', isError: true);
+      return;
+    }
+    
+    // --- New inventory validation check ---
+    final int? inventory = int.tryParse(_productInventoryController.text.trim());
+    
+    if (inventory == null || inventory < 10) {
+      _showSnackBar('Product inventory must be 10 or more.', isError: true);
       return;
     }
 
@@ -88,6 +101,7 @@ class _AddProductState extends State<AddProduct> {
         "Description": _productDescriptionController.text.trim(),
         "Price": int.tryParse(_productPriceController.text.trim()) ?? 0,
         "adminId": widget.adminID,
+        "inventory": inventory
       };
 
       await DatabaseMethods().addProduct(productData, selectedCategory!, widget.adminID);
@@ -162,6 +176,15 @@ class _AddProductState extends State<AddProduct> {
               TextField(controller: _productDescriptionController, maxLines: 4, decoration: const InputDecoration(hintText: 'Product Description')),
 
               const SizedBox(height: 20),
+              Text("Product Inventory", style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _productInventoryController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(hintText: 'Product Inventory'),
+              ),
+
+              const SizedBox(height: 20),
               Text("Product Price (INR)", style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
               TextField(controller: _productPriceController, keyboardType: TextInputType.number, decoration: const InputDecoration(hintText: 'Price', prefixIcon: Icon(Icons.currency_rupee))),
@@ -169,6 +192,7 @@ class _AddProductState extends State<AddProduct> {
               const SizedBox(height: 20),
               Text("Product Category", style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
+              
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 decoration: BoxDecoration(
