@@ -7,14 +7,14 @@ plugins {
 
 android {
     namespace = "com.classified.ecommerce_shop"
-    compileSdk = 35
+    compileSdk = 36 // <-- REQUIRED CHANGE: Updated from 35
 
-    ndkVersion = "27.0.12077973" // ✅ Required by Firebase plugins
+    ndkVersion = "27.0.12077973"
 
     defaultConfig {
         applicationId = "com.classified.ecommerce_shop"
-        minSdk = 23 // ✅ Required for firebase-auth >= 23.2.0
-        targetSdk = 35
+        minSdk = flutter.minSdkVersion
+        targetSdk = 36 // <-- BEST PRACTICE: Updated from 35 to match compileSdk
         versionCode = 1
         versionName = "1.0.0"
     }
@@ -30,7 +30,7 @@ android {
 
     buildTypes {
         getByName("release") {
-            signingConfig = signingConfigs.getByName("debug") // ⚠️ For development only
+            signingConfig = signingConfigs.getByName("debug")
             isMinifyEnabled = false
             isShrinkResources = false
         }
