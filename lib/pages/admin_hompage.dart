@@ -197,6 +197,10 @@ class _AdminHomePageState extends State<AdminHomePage> {
             final doc = orders[index];
             final data = doc.data() as Map<String, dynamic>;
             final timestamp = (data['timestamp'] as Timestamp?)?.toDate();
+            final orderId = doc.id;
+            final buyerId = data['buyerId'];
+            // ✅ STEP 1: Get the new shared ID from the admin's order document.
+            final consolidatedOrderId = data['consolidatedOrderId']; 
 
             return Card(
               margin: const EdgeInsets.only(bottom: 16),
@@ -231,7 +235,8 @@ class _AdminHomePageState extends State<AdminHomePage> {
                             children: [
                               Text("Order Status:", style: TextStyle(color: Colors.grey.shade600)),
                               const SizedBox(height: 4),
-                              _buildStatusDropdown(doc.id, data['orderStatus'] ?? 'Pending'),
+                              // ✅ STEP 2: Pass the shared ID to the dropdown builder.
+                              _buildStatusDropdown(orderId, buyerId, data['orderStatus'] ?? 'Pending', consolidatedOrderId),
                             ],
                           ),
                           Column(
@@ -259,7 +264,8 @@ class _AdminHomePageState extends State<AdminHomePage> {
   }
 
   /// Dropdown for updating order status.
-  Widget _buildStatusDropdown(String orderId, String currentStatus) {
+  // ✅ STEP 3: Update the function signature to accept the shared ID.
+  Widget _buildStatusDropdown(String orderId, String buyerId, String currentStatus, String? consolidatedOrderId) {
     final colorScheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -277,8 +283,9 @@ class _AdminHomePageState extends State<AdminHomePage> {
                 ))
             .toList(),
         onChanged: (newStatus) {
-          if (newStatus != null) {
-            _updateOrderStatus(orderId, newStatus);
+          // ✅ STEP 4: Pass the shared ID to the update function.
+          if (newStatus != null && consolidatedOrderId != null) {
+            _updateOrderStatus(orderId, buyerId, newStatus, consolidatedOrderId);
           }
         },
       ),
@@ -286,14 +293,30 @@ class _AdminHomePageState extends State<AdminHomePage> {
   }
 
   /// Updates the order status in Firestore.
-  Future<void> _updateOrderStatus(String orderId, String newStatus) async {
+  // ✅ STEP 5: Replace the old function with this corrected version.
+  Future<void> _updateOrderStatus(String orderId, String buyerId, String newStatus, String consolidatedOrderId) async {
     try {
-      await FirebaseFirestore.instance
+      final firestore = FirebaseFirestore.instance;
+      final batch = firestore.batch();
+      
+      // 1. Update the order in the admin's collection
+      final adminOrderRef = firestore
           .collection('Admin')
           .doc(widget.adminId)
           .collection('orders')
-          .doc(orderId)
-          .update({'orderStatus': newStatus});
+          .doc(orderId);
+      batch.update(adminOrderRef, {'orderStatus': newStatus});
+
+      // 2. FIX: Directly update the user's order document using the shared ID
+      final userOrderRef = firestore
+          .collection('users')
+          .doc(buyerId)
+          .collection('orders')
+          .doc(consolidatedOrderId); // Use the shared ID for a direct lookup
+      batch.update(userOrderRef, {'orderStatus': newStatus});
+
+      // Commit both updates as a single, atomic transaction
+      await batch.commit(); 
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

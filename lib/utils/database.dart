@@ -90,7 +90,11 @@ class DatabaseMethods {
     final batch = _firestore.batch();
 
     try {
-      // --- 1. Create order entries for each respective admin and update inventory ---
+      // ✅ STEP 1: Create the user's main order reference first to get a unique, shared ID.
+      final userOrderRef = _firestore.collection('users').doc(userId).collection('orders').doc();
+      final consolidatedOrderId = userOrderRef.id;
+
+      // --- 2. Create order entries for each respective admin and update inventory ---
       for (final productData in cartItems) {
         final adminId = productData['adminId'];
         final productId = productData['id'];
@@ -111,6 +115,8 @@ class DatabaseMethods {
           'buyerId': userId,
           'orderStatus': 'Pending',
           'timestamp': FieldValue.serverTimestamp(),
+          // ✅ STEP 2: Add the shared ID to the admin's order document.
+          'consolidatedOrderId': consolidatedOrderId,
         });
         
         // Use FieldValue.increment() for a safe, atomic inventory update
@@ -118,27 +124,27 @@ class DatabaseMethods {
         batch.update(productRef, {'inventory': FieldValue.increment(-quantity)});
       }
 
-      // --- 2. Create a single, consolidated order for the user ---
-      final userOrderRef = _firestore.collection('users').doc(userId).collection('orders').doc();
+      // --- 3. Create a single, consolidated order for the user ---
       final double totalPrice = cartItems.fold(0.0, (sum, item) => sum + ((item['Price'] ?? 0) * (item['quantity'] ?? 0)));
       batch.set(userOrderRef, {
-        'orderId': userOrderRef.id,
+        // ✅ STEP 3: Use the same shared ID for the user's order document.
+        'orderId': consolidatedOrderId,
         'items': cartItems,
         'totalPrice': totalPrice,
         'orderStatus': 'Pending',
         'timestamp': FieldValue.serverTimestamp(),
       });
 
-      // --- 3. Delete all documents from the user's cart ---
+      // --- 4. Delete all documents from the user's cart ---
       final cartQuerySnapshot = await _firestore.collection('users').doc(userId).collection('cart').get();
       for (final doc in cartQuerySnapshot.docs) {
         batch.delete(doc.reference);
       }
 
-      // --- 4. Commit all batched operations at once ---
+      // --- 5. Commit all batched operations at once ---
       await batch.commit();
 
-      // --- 5. If successful, clear the local cart provider ---
+      // --- 6. If successful, clear the local cart provider ---
       cartProvider.clearCart();
 
       return "Order placed successfully!";
@@ -191,5 +197,4 @@ class DatabaseMethods {
       return "Failed to submit review. Please try again later.";
     }
   }
-  
 }

@@ -198,6 +198,7 @@ class UserOrdersPage extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
@@ -230,62 +231,60 @@ class UserOrdersPage extends StatelessWidget {
                   'Qty: ${item['quantity'] ?? 1}',
                   style: TextStyle(color: Colors.grey[700]),
                 ),
+                const SizedBox(height: 8),
+                Text(
+                  '₹${(item['Price'] as num?)?.toStringAsFixed(2) ?? '0.00'}',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                if (showReviewButton) ...[
+                  const SizedBox(height: 8),
+                  StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('products')
+                        .doc(item['id'])
+                        .collection('reviews')
+                        .where('userId', isEqualTo: userId)
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const SizedBox(
+                          width: 80,
+                          child: Center(
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        );
+                      }
+                      if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
+                        return const Row(
+                          children: [
+                            Icon(Icons.verified_user, color: Colors.blue, size: 16),
+                            SizedBox(width: 4),
+                            Text('Reviewed', style: TextStyle(fontSize: 12)),
+                          ],
+                        );
+                      }
+                      return ElevatedButton(
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => AddReviewPage(productData: item),
+                            ),
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Theme.of(context).colorScheme.primary,
+                          foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          minimumSize: const Size(80, 30),
+                        ),
+                        child: const Text('Review', style: TextStyle(fontSize: 12)),
+                      );
+                    },
+                  ),
+                ]
               ],
             ),
           ),
-          Text(
-            '₹${(item['Price'] as num?)?.toStringAsFixed(2) ?? '0.00'}',
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-          if (showReviewButton) ...[
-            const SizedBox(width: 12),
-            StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('products')
-                  .doc(item['id'])
-                  .collection('reviews')
-                  .where('userId', isEqualTo: userId)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const SizedBox(
-                    width: 80,
-                    child: Center(
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  );
-                }
-                if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
-                  return const SizedBox(
-                    width: 80,
-                    child: Row(
-                      children: [
-                        Icon(Icons.verified_user, color: Colors.blue, size: 16),
-                        SizedBox(width: 4),
-                        Text('Reviewed', style: TextStyle(fontSize: 12)),
-                      ],
-                    ),
-                  );
-                }
-                return ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => AddReviewPage(productData: item),
-                      ),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    minimumSize: const Size(80, 30),
-                  ),
-                  child: const Text('Review', style: TextStyle(fontSize: 12)),
-                );
-              },
-            ),
-          ]
         ],
       ),
     );
