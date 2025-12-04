@@ -4,7 +4,6 @@ import 'package:ecommerce_shop/services/cart_provider.dart';
 class DatabaseMethods {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // --- New method to update a product's inventory count ---
   Future<void> updateProductInventory(String productId, int change) async {
     final productRef = _firestore.collection('products').doc(productId);
     final docSnapshot = await productRef.get();
@@ -16,33 +15,44 @@ class DatabaseMethods {
     }
   }
 
+  // --- UPDATED ADD PRODUCT METHOD ---
   Future<void> addProduct(Map<String, dynamic> productData, String categoryName, String adminId) async {
     final String productId = productData['id'];
 
-    final productDataWithAdmin = {
+    // Prepare the master data map
+    final productDataComplete = {
       ...productData,
       'adminId': adminId,
+      'category': categoryName, // Ensure category is saved in the document
     };
 
-    await _firestore.collection(categoryName).doc(productId).set(productDataWithAdmin);
+    // 1. Write to global 'products' collection (Single Source of Truth)
+    await _firestore.collection('products').doc(productId).set(productDataComplete);
 
-    await _firestore.collection('products').doc(productId).set({
-      ...productDataWithAdmin,
-      'category': categoryName
-    });
-
+    // 2. Write to Admin's personal listing (For their dashboard)
     await _firestore
         .collection('Admin')
         .doc(adminId)
         .collection('listings')
         .doc(productId)
-        .set(productDataWithAdmin);
+        .set(productDataComplete);
+        
+    // REMOVED: await _firestore.collection(categoryName)...
   }
 
+  // --- UPDATED GET LISTINGS METHOD ---
   Future<Stream<QuerySnapshot>> getListings(String category) async {
-    return _firestore.collection(category).snapshots();
+    // OLD WAY: return _firestore.collection(category).snapshots();
+    
+    // NEW WAY: Query the main collection and filter
+    return _firestore
+        .collection('products')
+        .where('category', isEqualTo: category)
+        .snapshots();
   }
 
+  // ... (Rest of your methods remain exactly the same) ...
+  
   Future<void> addToCart(String userId, Map<String, dynamic> product) async {
     final cartRef = _firestore.collection('users').doc(userId).collection('cart').doc(product['id']);
 
@@ -90,11 +100,9 @@ class DatabaseMethods {
     final batch = _firestore.batch();
 
     try {
-      // ✅ STEP 1: Create the user's main order reference first to get a unique, shared ID.
       final userOrderRef = _firestore.collection('users').doc(userId).collection('orders').doc();
       final consolidatedOrderId = userOrderRef.id;
 
-      // --- 2. Create order entries for each respective admin and update inventory ---
       for (final productData in cartItems) {
         final adminId = productData['adminId'];
         final productId = productData['id'];
@@ -104,7 +112,6 @@ class DatabaseMethods {
           continue;
         }
 
-        // Add the order to the admin's collection
         final adminOrderRef = _firestore.collection('Admin').doc(adminId).collection('orders').doc();
         batch.set(adminOrderRef, {
           'productName': productData['Name'],
@@ -115,19 +122,15 @@ class DatabaseMethods {
           'buyerId': userId,
           'orderStatus': 'Pending',
           'timestamp': FieldValue.serverTimestamp(),
-          // ✅ STEP 2: Add the shared ID to the admin's order document.
           'consolidatedOrderId': consolidatedOrderId,
         });
         
-        // Use FieldValue.increment() for a safe, atomic inventory update
         final productRef = _firestore.collection('products').doc(productId);
         batch.update(productRef, {'inventory': FieldValue.increment(-quantity)});
       }
 
-      // --- 3. Create a single, consolidated order for the user ---
       final double totalPrice = cartItems.fold(0.0, (sum, item) => sum + ((item['Price'] ?? 0) * (item['quantity'] ?? 0)));
       batch.set(userOrderRef, {
-        // ✅ STEP 3: Use the same shared ID for the user's order document.
         'orderId': consolidatedOrderId,
         'items': cartItems,
         'totalPrice': totalPrice,
@@ -135,16 +138,12 @@ class DatabaseMethods {
         'timestamp': FieldValue.serverTimestamp(),
       });
 
-      // --- 4. Delete all documents from the user's cart ---
       final cartQuerySnapshot = await _firestore.collection('users').doc(userId).collection('cart').get();
       for (final doc in cartQuerySnapshot.docs) {
         batch.delete(doc.reference);
       }
 
-      // --- 5. Commit all batched operations at once ---
       await batch.commit();
-
-      // --- 6. If successful, clear the local cart provider ---
       cartProvider.clearCart();
 
       return "Order placed successfully!";
@@ -154,7 +153,6 @@ class DatabaseMethods {
       return "Failed to place order. Please try again later.";
     }
   }
-
 
   Future<List<Map<String, dynamic>>> fetchOrders(String userId) async {
     final ordersSnapshot = await _firestore.collection('users').doc(userId).collection('orders').get();
@@ -168,28 +166,44 @@ class DatabaseMethods {
     required String reviewText,
   }) async {
     try {
-      final userDoc = await _firestore.collection('users').doc(userId).get();
-      if (!userDoc.exists) {
-        return "User not found.";
-      }
+      // 1. Get Current Product Data (To calculate average)
+      DocumentReference productRef = _firestore.collection('products').doc(productId);
+      DocumentSnapshot productSnap = await productRef.get();
+      
+      if (!productSnap.exists) return "Product not found";
 
-      final userName = userDoc.data()?['Name'] ?? 'Anonymous User';
-      final userImage = userDoc.data()?['Image'] ?? '';
+      Map<String, dynamic> productData = productSnap.data() as Map<String, dynamic>;
+      
+      // Get existing stats (Default to 0 if new)
+      double currentAvg = (productData['averageRating'] as num?)?.toDouble() ?? 0.0;
+      int currentCount = (productData['reviewCount'] as num?)?.toInt() ?? 0;
 
+      // 2. Calculate New Average
+      // Formula: ((OldAvg * OldCount) + NewRating) / (OldCount + 1)
+      double newAvg = ((currentAvg * currentCount) + rating) / (currentCount + 1);
+
+      // 3. Prepare Review Data
       final reviewData = {
         'userId': userId,
-        'userName': userName,
-        'userImage': userImage,
         'rating': rating,
         'reviewText': reviewText,
         'timestamp': FieldValue.serverTimestamp(),
       };
 
-      await _firestore
-          .collection('products')
-          .doc(productId)
-          .collection('reviews')
-          .add(reviewData);
+      // 4. Batch Write (Atomic Safety)
+      WriteBatch batch = _firestore.batch();
+
+      // Add the review to subcollection
+      DocumentReference reviewRef = productRef.collection('reviews').doc();
+      batch.set(reviewRef, reviewData);
+
+      // Update the Main Product Document with new stats
+      batch.update(productRef, {
+        'averageRating': newAvg,
+        'reviewCount': FieldValue.increment(1),
+      });
+
+      await batch.commit();
 
       return "Review submitted successfully!";
     } catch (e) {

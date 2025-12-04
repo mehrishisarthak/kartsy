@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ecommerce_shop/pages/add_product.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // For numeric input formatter
 import 'package:intl/intl.dart';
 
 class AdminHomePage extends StatefulWidget {
@@ -12,6 +13,127 @@ class AdminHomePage extends StatefulWidget {
 }
 
 class _AdminHomePageState extends State<AdminHomePage> {
+  // --- LOGIC: DELETE PRODUCT ---
+  Future<void> _deleteProduct(String productId) async {
+    try {
+      // We use a Batch to ensure it deletes from BOTH collections or NEITHER
+      final batch = FirebaseFirestore.instance.batch();
+
+      // 1. Delete from Global Products
+      final globalRef = FirebaseFirestore.instance.collection('products').doc(productId);
+      batch.delete(globalRef);
+
+      // 2. Delete from Admin's Personal Listings
+      final adminRef = FirebaseFirestore.instance
+          .collection('Admin')
+          .doc(widget.adminId)
+          .collection('listings')
+          .doc(productId);
+      batch.delete(adminRef);
+
+      await batch.commit();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Product deleted successfully"), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error deleting product: $e"), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  // --- LOGIC: UPDATE INVENTORY ---
+  Future<void> _updateInventory(String productId, int newQuantity) async {
+    try {
+      final batch = FirebaseFirestore.instance.batch();
+
+      // 1. Update Global Products
+      final globalRef = FirebaseFirestore.instance.collection('products').doc(productId);
+      batch.update(globalRef, {'inventory': newQuantity});
+
+      // 2. Update Admin's Personal Listings
+      final adminRef = FirebaseFirestore.instance
+          .collection('Admin')
+          .doc(widget.adminId)
+          .collection('listings')
+          .doc(productId);
+      batch.update(adminRef, {'inventory': newQuantity});
+
+      await batch.commit();
+
+      if (mounted) {
+        Navigator.pop(context); // Close dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Stock updated to $newQuantity"), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Failed to update stock: $e"), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  // --- UI: SHOW DELETE CONFIRMATION ---
+  void _showDeleteDialog(String productId, String productName) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Delete Product"),
+        content: Text("Are you sure you want to remove '$productName'? This cannot be undone."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _deleteProduct(productId);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text("Delete"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- UI: SHOW UPDATE STOCK DIALOG ---
+  void _showUpdateStockDialog(String productId, int currentStock) {
+    final TextEditingController stockController = TextEditingController(text: currentStock.toString());
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Update Stock"),
+        content: TextField(
+          controller: stockController,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          decoration: const InputDecoration(labelText: "New Quantity", border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          ElevatedButton(
+            onPressed: () {
+              final int? newQty = int.tryParse(stockController.text.trim());
+              if (newQty != null) {
+                _updateInventory(productId, newQty);
+              }
+            },
+            child: const Text("Update"),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -19,10 +141,10 @@ class _AdminHomePageState extends State<AdminHomePage> {
     final textTheme = theme.textTheme;
 
     return DefaultTabController(
-      length: 2, // The number of tabs
+      length: 2,
       child: Scaffold(
         appBar: PreferredSize(
-          preferredSize: const Size.fromHeight(140), // Increased height for tabs
+          preferredSize: const Size.fromHeight(140),
           child: Container(
             padding: const EdgeInsets.only(top: 40),
             decoration: BoxDecoration(
@@ -67,9 +189,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
         ),
         body: TabBarView(
           children: [
-            // Content for "Your Listings" tab
             _buildProductList(widget.adminId),
-            // Content for "New Orders" tab
             _buildOrderList(widget.adminId),
           ],
         ),
@@ -98,7 +218,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
           .collection('Admin')
           .doc(adminId)
           .collection('listings')
-          .orderBy('Name') // Sort alphabetically
+          .orderBy('Name')
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) return const Center(child: Text("Error loading listings"));
@@ -119,13 +239,16 @@ class _AdminHomePageState extends State<AdminHomePage> {
           itemBuilder: (context, index) {
             final doc = products[index];
             final data = doc.data() as Map<String, dynamic>;
+            final int inventory = int.tryParse(data['inventory']?.toString() ?? '0') ?? 0;
 
             return Card(
               margin: const EdgeInsets.only(bottom: 12),
+              elevation: 2,
               child: Padding(
                 padding: const EdgeInsets.all(8.0),
                 child: Row(
                   children: [
+                    // Product Image
                     ClipRRect(
                       borderRadius: BorderRadius.circular(8),
                       child: Image.network(
@@ -142,21 +265,53 @@ class _AdminHomePageState extends State<AdminHomePage> {
                       ),
                     ),
                     const SizedBox(width: 16),
+                    // Details
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(data['Name'] ?? 'Unnamed Product', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                          Text(
+                            data['Name'] ?? 'Unnamed Product',
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                           const SizedBox(height: 4),
-                          Text("₹${data['Price']?.toString() ?? 'N/A'}", style: TextStyle(fontSize: 15, color: Colors.green.shade700, fontWeight: FontWeight.w600)),
+                          Text(
+                            "₹${data['Price']?.toString() ?? 'N/A'}",
+                            style: TextStyle(fontSize: 15, color: Colors.green.shade700, fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 4),
+                          // Stock Indicator Row
+                          InkWell(
+                            onTap: () => _showUpdateStockDialog(doc.id, inventory),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.inventory_2_outlined, 
+                                  size: 16, 
+                                  color: inventory < 10 ? Colors.red : Colors.grey[700]
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  "Stock: $inventory",
+                                  style: TextStyle(
+                                    color: inventory < 10 ? Colors.red : Colors.grey[700],
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                const Icon(Icons.edit, size: 14, color: Colors.blue),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
                     ),
+                    // Delete Button
                     IconButton(
                       icon: Icon(Icons.delete_outline, color: Theme.of(context).colorScheme.error),
-                      onPressed: () {
-                        // TODO: Implement delete product logic with confirmation dialog
-                      },
+                      onPressed: () => _showDeleteDialog(doc.id, data['Name'] ?? 'Product'),
                     ),
                   ],
                 ),
@@ -168,14 +323,14 @@ class _AdminHomePageState extends State<AdminHomePage> {
     );
   }
 
-  /// Builds the list of incoming orders for the admin.
+  /// Builds the list of incoming orders.
   Widget _buildOrderList(String adminId) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('Admin')
           .doc(adminId)
           .collection('orders')
-          .orderBy('timestamp', descending: true) // Show newest orders first
+          .orderBy('timestamp', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) return const Center(child: Text("Error loading orders"));
@@ -199,8 +354,12 @@ class _AdminHomePageState extends State<AdminHomePage> {
             final timestamp = (data['timestamp'] as Timestamp?)?.toDate();
             final orderId = doc.id;
             final buyerId = data['buyerId'];
-            // ✅ STEP 1: Get the new shared ID from the admin's order document.
             final consolidatedOrderId = data['consolidatedOrderId']; 
+
+            // FIX: Safe Calculation for Price
+            final double price = (data['productPrice'] as num?)?.toDouble() ?? 0.0;
+            final int quantity = (data['quantity'] as num?)?.toInt() ?? 1;
+            final double total = price * quantity;
 
             return Card(
               margin: const EdgeInsets.only(bottom: 16),
@@ -222,7 +381,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                         ),
                       ),
                       title: Text(data['productName'] ?? 'Unknown Product', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text("Qty: ${data['quantity'] ?? 1}  |  Total: ₹${(data['productPrice'] ?? 0) * (data['quantity'] ?? 1)}"),
+                      subtitle: Text("Qty: $quantity  |  Total: ₹${total.toStringAsFixed(2)}"),
                     ),
                     const Divider(),
                     Padding(
@@ -235,7 +394,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
                             children: [
                               Text("Order Status:", style: TextStyle(color: Colors.grey.shade600)),
                               const SizedBox(height: 4),
-                              // ✅ STEP 2: Pass the shared ID to the dropdown builder.
                               _buildStatusDropdown(orderId, buyerId, data['orderStatus'] ?? 'Pending', consolidatedOrderId),
                             ],
                           ),
@@ -263,8 +421,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
     );
   }
 
-  /// Dropdown for updating order status.
-  // ✅ STEP 3: Update the function signature to accept the shared ID.
   Widget _buildStatusDropdown(String orderId, String buyerId, String currentStatus, String? consolidatedOrderId) {
     final colorScheme = Theme.of(context).colorScheme;
     return Container(
@@ -275,7 +431,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
       ),
       child: DropdownButton<String>(
         value: currentStatus,
-        underline: const SizedBox(), // Hides the default underline
+        underline: const SizedBox(),
         items: ['Pending', 'Shipped', 'Delivered', 'Cancelled']
             .map((status) => DropdownMenuItem(
                   value: status,
@@ -283,7 +439,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
                 ))
             .toList(),
         onChanged: (newStatus) {
-          // ✅ STEP 4: Pass the shared ID to the update function.
           if (newStatus != null && consolidatedOrderId != null) {
             _updateOrderStatus(orderId, buyerId, newStatus, consolidatedOrderId);
           }
@@ -292,14 +447,12 @@ class _AdminHomePageState extends State<AdminHomePage> {
     );
   }
 
-  /// Updates the order status in Firestore.
-  // ✅ STEP 5: Replace the old function with this corrected version.
   Future<void> _updateOrderStatus(String orderId, String buyerId, String newStatus, String consolidatedOrderId) async {
     try {
       final firestore = FirebaseFirestore.instance;
       final batch = firestore.batch();
       
-      // 1. Update the order in the admin's collection
+      // 1. Update Admin Order
       final adminOrderRef = firestore
           .collection('Admin')
           .doc(widget.adminId)
@@ -307,16 +460,15 @@ class _AdminHomePageState extends State<AdminHomePage> {
           .doc(orderId);
       batch.update(adminOrderRef, {'orderStatus': newStatus});
 
-      // 2. FIX: Directly update the user's order document using the shared ID
+      // 2. Update User Order (Using consolidatedOrderId)
       final userOrderRef = firestore
           .collection('users')
           .doc(buyerId)
           .collection('orders')
-          .doc(consolidatedOrderId); // Use the shared ID for a direct lookup
+          .doc(consolidatedOrderId);
       batch.update(userOrderRef, {'orderStatus': newStatus});
 
-      // Commit both updates as a single, atomic transaction
-      await batch.commit(); 
+      await batch.commit();
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

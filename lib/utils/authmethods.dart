@@ -11,7 +11,6 @@ class AuthMethods {
     required String email,
     required String password,
     required String username,
-    required String userId,
     required String image,
   }) async {
     String res = "Some error occurred";
@@ -30,7 +29,6 @@ class AuthMethods {
         await _firestore.collection('users').doc(cred.user!.uid).set({
           'Name': username.trim(),
           'Email': email.trim(),
-          'Id': userId, // Your custom ID
           'Image': image,
         });
 
@@ -146,7 +144,7 @@ class AuthMethods {
             'Id': user.uid, // Use the Firebase UID as the primary ID
             // Default image if none provided
             // google accounts usually have a profile image, we use it else we set a default
-            'Image': user.photoURL ?? "https://firebasestorage.googleapis.com/v0/b/kartsy-3ff24.firebasestorage.app/o/assets%2Fdefault_profile.png?alt=media&token=2038c7c3-dd79-41f1-b5bd-30e39e76af5d",
+            'Image': user.photoURL ?? "https://firebasestorage.googleapis.com/v0/b/kartsyapp-87532.firebasestorage.app/o/default_profile.png?alt=media&token=d328f93c-400f-4deb-a0e8-014eb2e2b795",
           });
         }
         res = "Login successful.";

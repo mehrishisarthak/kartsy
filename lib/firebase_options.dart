@@ -41,19 +41,20 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyDwYcg6sFanCyxMcPy9KiXvvofcz2f-NKo',
-    appId: '1:507353148295:android:ffc2401186d687f5dc8122',
-    messagingSenderId: '507353148295',
-    projectId: 'kartsy-3ff24',
-    storageBucket: 'kartsy-3ff24.firebasestorage.app',
+    apiKey: 'AIzaSyD4JZVYsdyNOCJYwwO97oVULjNXnfFHSYk',
+    appId: '1:52345924540:android:aa22e653ea0a54b41b59b9',
+    messagingSenderId: '52345924540',
+    projectId: 'kartsyapp-87532',
+    storageBucket: 'kartsyapp-87532.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyADwwZ0NJcOPtr17jIP0wNSneJUvm06b7E',
-    appId: '1:507353148295:ios:7dc7da17859290aadc8122',
-    messagingSenderId: '507353148295',
-    projectId: 'kartsy-3ff24',
-    storageBucket: 'kartsy-3ff24.firebasestorage.app',
+    apiKey: 'AIzaSyABudkujh_GfMFux-CB6qMXcUPn7RVwvvU',
+    appId: '1:52345924540:ios:6ff687fabc34fcb81b59b9',
+    messagingSenderId: '52345924540',
+    projectId: 'kartsyapp-87532',
+    storageBucket: 'kartsyapp-87532.firebasestorage.app',
+    iosClientId: '52345924540-gmc86dl2ee1k74navpjnhm2dlrejrq8g.apps.googleusercontent.com',
     iosBundleId: 'com.classified.ecommerceShop',
   );
 

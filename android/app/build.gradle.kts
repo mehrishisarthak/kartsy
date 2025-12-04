@@ -12,7 +12,7 @@ android {
     ndkVersion = "27.0.12077973"
 
     defaultConfig {
-        applicationId = "com.classified.ecommerce_shop"
+        applicationId = "com.classified.kartsy"
         minSdk = flutter.minSdkVersion
         targetSdk = 36 // <-- BEST PRACTICE: Updated from 35 to match compileSdk
         versionCode = 1

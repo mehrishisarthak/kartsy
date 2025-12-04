@@ -1,9 +1,10 @@
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ecommerce_shop/pages/admin_login.dart';
-import 'package:ecommerce_shop/pages/order_screen.dart';
+import 'package:ecommerce_shop/pages/order_screen.dart'; // Ensure this matches your file name (UserOrdersPage)
 import 'package:ecommerce_shop/pages/settings.dart';
 import 'package:ecommerce_shop/services/shared_preferences.dart';
+import 'package:ecommerce_shop/services/shimmer/profile_shimmer.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
@@ -122,7 +123,6 @@ class _ProfilePageState extends State<ProfilePage> {
         }
       }
     } catch (e) {
-      // ignore: avoid_print
       print("Error loading user data: $e");
       if (mounted) _showErrorSnackBar("Failed to load user data");
     }
@@ -186,7 +186,7 @@ class _ProfilePageState extends State<ProfilePage> {
           .where('Address.mobile', isEqualTo: phoneNumber)
           .limit(1)
           .get();
-
+      // If a document is found and it's not the current user's number
       if (querySnapshot.docs.isNotEmpty && querySnapshot.docs.first.id != currentUser?.uid) {
         _showErrorSnackBar("Phone number is already in use by another account.");
         return;
@@ -210,7 +210,7 @@ class _ProfilePageState extends State<ProfilePage> {
               _showErrorSnackBar("Failed to link credential: ${e.toString()}");
             }
           } finally {
-              if (mounted) setState(() => _isLoading = false);
+            if (mounted) setState(() => _isLoading = false);
           }
         },
         verificationFailed: (FirebaseAuthException e) {
@@ -342,7 +342,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Widget _buildDropdown({required String hint, required String? value, required List<String> items, required void Function(String?)? onChanged}) {
     return DropdownButtonFormField<String>(
-      value: value,
+      initialValue: value,
       hint: Text(hint, style: TextStyle(color: Colors.grey[600])),
       isExpanded: true,
       items: items.map((String item) => DropdownMenuItem<String>(value: item, child: Text(item, overflow: TextOverflow.ellipsis))).toList(),
@@ -387,6 +387,7 @@ class _ProfilePageState extends State<ProfilePage> {
             icon: const Icon(Icons.shopping_bag_outlined),
             onPressed: () {
               if (widget.userId != null) {
+                // Ensure UserOrdersPage is imported correctly
                 Navigator.of(context).push(
                   MaterialPageRoute(builder: (context) => UserOrdersPage(userId: widget.userId!)),
                 );
@@ -400,8 +401,9 @@ class _ProfilePageState extends State<ProfilePage> {
         leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.pop(context)),
         title: const Text("Edit Profile"),
       ),
+      // --- CHANGED: Use ProfileShimmer when data is loading ---
       body: personData == null
-          ? Center(child: CircularProgressIndicator(color: colorScheme.primary))
+          ? const ProfileShimmer() 
           : SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(24, 24, 24, 120),
               child: Column(

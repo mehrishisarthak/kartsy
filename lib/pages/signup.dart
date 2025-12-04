@@ -70,17 +70,14 @@ class _SignupPageState extends State<SignupPage> {
     }
 
     setState(() => _isLoading = true);
-
-    String userId = randomAlphaNumeric(10);
     // This is a placeholder image URL.
     String image =
-        "https://firebasestorage.googleapis.com/v0/b/kartsy-3ff24.firebasestorage.app/o/assets%2Fdefault_profile.png?alt=media&token=2038c7c3-dd79-41f1-b5bd-30e39e76af5d";
+        "https://firebasestorage.googleapis.com/v0/b/kartsyapp-87532.firebasestorage.app/o/default_profile.png?alt=media&token=d328f93c-400f-4deb-a0e8-014eb2e2b795";
 
     String res = await AuthMethods().signUpUser(
       email: _emailController.text.trim(),
       password: _passwordController.text.trim(),
       username: _nameController.text.trim(),
-      userId: userId,
       image: image,
     );
 

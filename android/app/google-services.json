@@ -1,45 +1,73 @@
 {
   "project_info": {
-    "project_number": "507353148295",
-    "project_id": "kartsy-3ff24",
-    "storage_bucket": "kartsy-3ff24.firebasestorage.app"
+    "project_number": "52345924540",
+    "project_id": "kartsyapp-87532",
+    "storage_bucket": "kartsyapp-87532.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:507353148295:android:d201f8e6bc112027dc8122",
+        "mobilesdk_app_id": "1:52345924540:android:512ebc4a491037371b59b9",
         "android_client_info": {
           "package_name": "com.classified.ecommerce_shop"
         }
       },
       "oauth_client": [
         {
-          "client_id": "507353148295-53d4hpdf6qvnfsd4bfss1hpn6th2pnmd.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.classified.ecommerce_shop",
-            "certificate_hash": "fdac5cf9db966837cdc6b35615a63c5e4e97e114"
-          }
-        },
-        {
-          "client_id": "507353148295-00jruc2tjk6t5lkm54gv21261v7i1nlm.apps.googleusercontent.com",
+          "client_id": "52345924540-avhagumi7ssps1vtgmkjds3321m8ou42.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyDwYcg6sFanCyxMcPy9KiXvvofcz2f-NKo"
+          "current_key": "AIzaSyD4JZVYsdyNOCJYwwO97oVULjNXnfFHSYk"
         }
       ],
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "507353148295-00jruc2tjk6t5lkm54gv21261v7i1nlm.apps.googleusercontent.com",
+              "client_id": "52345924540-avhagumi7ssps1vtgmkjds3321m8ou42.apps.googleusercontent.com",
               "client_type": 3
             },
             {
-              "client_id": "507353148295-97i399ojkkp8s7i89icgjiko6g8rg2au.apps.googleusercontent.com",
+              "client_id": "52345924540-gmc86dl2ee1k74navpjnhm2dlrejrq8g.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.classified.ecommerceShop"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:52345924540:android:aa22e653ea0a54b41b59b9",
+        "android_client_info": {
+          "package_name": "com.classified.kartsy"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "52345924540-avhagumi7ssps1vtgmkjds3321m8ou42.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD4JZVYsdyNOCJYwwO97oVULjNXnfFHSYk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "52345924540-avhagumi7ssps1vtgmkjds3321m8ou42.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "52345924540-gmc86dl2ee1k74navpjnhm2dlrejrq8g.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
                 "bundle_id": "com.classified.ecommerceShop"

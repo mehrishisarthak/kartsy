@@ -1,5 +1,6 @@
 import 'package:ecommerce_shop/services/shared_preferences.dart';
 import 'package:ecommerce_shop/utils/database.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Import for query
 import 'package:flutter/material.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 
@@ -25,6 +26,9 @@ class _AddReviewPageState extends State<AddReviewPage> {
 
   /// Submits the review to the database.
   Future<void> _submitReview() async {
+    // 1. Dismiss Keyboard
+    FocusScope.of(context).unfocus();
+
     // Basic validation
     if (_rating == 0) {
       _showSnackBar("Please provide a star rating.", isError: true);
@@ -44,6 +48,19 @@ class _AddReviewPageState extends State<AddReviewPage> {
         return;
       }
 
+      // 2. Check for existing review (Optional but recommended)
+      final existingReview = await FirebaseFirestore.instance
+          .collection('products')
+          .doc(widget.productData['id'])
+          .collection('reviews')
+          .where('userId', isEqualTo: userId)
+          .get();
+
+      if (existingReview.docs.isNotEmpty) {
+        _showSnackBar("You have already reviewed this product.", isError: true);
+        return;
+      }
+
       final result = await DatabaseMethods().addReview(
         productId: widget.productData['id']!,
         userId: userId,
@@ -57,7 +74,7 @@ class _AddReviewPageState extends State<AddReviewPage> {
         Navigator.pop(context); // Go back to the previous screen on success
       }
     } catch (e) {
-      _showSnackBar("An unexpected error occurred.", isError: true);
+      _showSnackBar("An unexpected error occurred: $e", isError: true);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -108,6 +125,8 @@ class _AddReviewPageState extends State<AddReviewPage> {
               allowHalfRating: false,
               itemCount: 5,
               itemSize: 36,
+              // 3. Disable interaction when loading
+              ignoreGestures: _isLoading, 
               itemPadding: const EdgeInsets.symmetric(horizontal: 4.0),
               itemBuilder: (context, _) => Icon(
                 Icons.star,
@@ -127,6 +146,8 @@ class _AddReviewPageState extends State<AddReviewPage> {
             TextFormField(
               controller: _reviewController,
               maxLines: 5,
+              // 3. Disable input when loading
+              enabled: !_isLoading,
               decoration: InputDecoration(
                 hintText: 'Share your thoughts about this product...',
                 border: OutlineInputBorder(
