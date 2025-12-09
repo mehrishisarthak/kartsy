@@ -13,7 +13,7 @@ class DiscoverPage extends StatefulWidget {
 class _DiscoverPageState extends State<DiscoverPage> {
   // --- PAGINATION VARIABLES ---
   final ScrollController _scrollController = ScrollController();
-  List<DocumentSnapshot> _products = [];
+  final List<DocumentSnapshot> _products = [];
   bool _isLoading = false;
   bool _hasMore = true;
   DocumentSnapshot? _lastDocument;

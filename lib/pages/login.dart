@@ -1,10 +1,7 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:ecommerce_shop/pages/bottomnav.dart';
 import 'package:ecommerce_shop/pages/login_after_signup.dart';
 import 'package:ecommerce_shop/pages/signup.dart';
-import 'package:ecommerce_shop/services/shared_preferences.dart';
+import 'package:ecommerce_shop/services/shimmer/signup_shimmer.dart';
 import 'package:ecommerce_shop/utils/authmethods.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 
@@ -16,8 +13,14 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
+  final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  
+  // 🔒 Forgot Password Controllers
+  final _forgotEmailController = TextEditingController();
+  final _focusEmail = FocusNode();
+  
   bool _isLoading = false;
   bool _isPasswordVisible = false;
 
@@ -25,6 +28,8 @@ class _LoginPageState extends State<LoginPage> {
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _forgotEmailController.dispose();
+    _focusEmail.dispose();
     super.dispose();
   }
 
@@ -40,7 +45,57 @@ class _LoginPageState extends State<LoginPage> {
       ));
   }
 
+  // 🔒 FORGOT PASSWORD DIALOG (NEW)
+  Future<void> _showForgotPasswordDialog() async {
+    _forgotEmailController.text = _emailController.text; // Pre-fill email
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Reset Password"),
+        content: TextField(
+          controller: _forgotEmailController,
+          focusNode: _focusEmail,
+          keyboardType: TextInputType.emailAddress,
+          autofocus: true,
+          decoration: InputDecoration(
+            hintText: "Enter your email address",
+            prefixIcon: const Icon(Icons.email_outlined),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton.icon(
+            onPressed: () async {
+              final res = await AuthMethods().forgotPassword(
+                email: _forgotEmailController.text.trim(),
+              );
+              
+              Navigator.pop(context);
+              _showSnackBar(
+                res.contains("sent") ? res : res,
+                backgroundColor: res.contains("sent") ? Colors.green : Theme.of(context).colorScheme.error,
+              );
+            },
+            icon: const Icon(Icons.email_outlined),
+            label: const Text("Send Reset Link"),
+            style: ElevatedButton.styleFrom(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ROBUST LOGIN LOGIC
   Future<void> _handleLogin() async {
+    if (!_formKey.currentState!.validate()) return;
+
     setState(() => _isLoading = true);
 
     try {
@@ -49,96 +104,50 @@ class _LoginPageState extends State<LoginPage> {
         password: _passwordController.text.trim(),
       );
 
-      /// Check for the verification error specifically
+      if (!mounted) return;
+
       if (res.contains("Please verify your email")) {
-        if (mounted) {
-          // Show a helpful message and then navigate
-          _showSnackBar(res, backgroundColor: Colors.orange.shade700);
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const LoginPageAfterSignup()),
-          );
-        }
         setState(() => _isLoading = false);
-        return; // Stop further execution
+        _showSnackBar(res, backgroundColor: Colors.orange.shade700);
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const LoginPageAfterSignup()),
+        );
+        return;
       }
 
-      // Handle other responses
       if (res == "Login successful.") {
-        _showSnackBar(res);
-
-        final uid = FirebaseAuth.instance.currentUser!.uid;
-        final userSnap = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-
-        if (!userSnap.exists) {
-          throw Exception("User profile not found in the database.");
-        }
-
-        final userData = userSnap.data()!;
-        final prefs = SharedPreferenceHelper();
-        await prefs.saveUserEmail(userData['Email']);
-        await prefs.saveUserName(userData['Name']);
-        await prefs.saveUserId(uid);
-        await prefs.saveUserImage(userData['Image']);
-
-        if (mounted) {
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (context) => const BottomBar()),
-            (route) => false,
-          );
-        }
+        Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
       } else {
-        // Handle all other errors
+        setState(() => _isLoading = false);
         _showSnackBar(res, isError: true);
       }
     } catch (e) {
-      _showSnackBar("Login failed: ${e.toString()}", isError: true);
-    } finally {
       if (mounted) {
         setState(() => _isLoading = false);
+        _showSnackBar("Login failed: ${e.toString()}", isError: true);
       }
     }
   }
 
-  /// Handles the Google login process.
   Future<void> _handleGoogleLogin() async {
     setState(() => _isLoading = true);
 
     try {
       String res = await AuthMethods().signInWithGoogle();
       
-      final bool isSuccess = res == "Login successful.";
+      if (!mounted) return;
 
-      _showSnackBar(res, isError: !isSuccess);
-
-      if (isSuccess) {
-        // If Google sign-in is successful, fetch user data and navigate to home
-        final uid = FirebaseAuth.instance.currentUser!.uid;
-        final userSnap = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-
-        if (!userSnap.exists) {
-          throw Exception("User profile not found in the database after Google Sign-In.");
-        }
-
-        final userData = userSnap.data()!;
-        final prefs = SharedPreferenceHelper();
-        await prefs.saveUserEmail(userData['Email']);
-        await prefs.saveUserName(userData['Name']);
-        await prefs.saveUserId(uid);
-        await prefs.saveUserImage(userData['Image']);
-
-        if (mounted) {
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (context) => const BottomBar()),
-                (route) => false,
-          );
-        }
+      if (res == "Login successful.") {
+        Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+      } else {
+        setState(() => _isLoading = false);
+        _showSnackBar(res, isError: true);
       }
     } catch (e) {
-      _showSnackBar("An unexpected error occurred during Google Sign-In.", isError: true);
-    } finally {
       if (mounted) {
         setState(() => _isLoading = false);
+        _showSnackBar("Google Sign-In failed", isError: true);
       }
     }
   }
@@ -166,60 +175,67 @@ class _LoginPageState extends State<LoginPage> {
           child: Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Lottie.asset(
-                    'images/login.json',
-                    height: 220,
-                    fit: BoxFit.contain,
-                  ),
-                  const SizedBox(height: 24),
-
-                  Text(
-                    "Welcome Back!",
-                    textAlign: TextAlign.center,
-                    style: textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: colorScheme.primary,
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Lottie.asset(
+                      'images/login.json',
+                      height: 220,
+                      fit: BoxFit.contain,
+                      errorBuilder: (c, e, s) => const Icon(Icons.login, size: 80),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    "Login to continue",
-                    textAlign: TextAlign.center,
-                    style: textTheme.titleMedium?.copyWith(
-                      color: Colors.grey[600],
+                    const SizedBox(height: 24),
+
+                    Text(
+                      "Welcome Back!",
+                      textAlign: TextAlign.center,
+                      style: textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.primary,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 32),
+                    const SizedBox(height: 8),
+                    Text(
+                      "Login to continue",
+                      textAlign: TextAlign.center,
+                      style: textTheme.titleMedium?.copyWith(color: Colors.grey[600]),
+                    ),
+                    const SizedBox(height: 32),
 
-                  _buildTextField(
-                    controller: _emailController,
-                    hintText: "Email Address",
-                    icon: Icons.email_outlined,
-                    keyboardType: TextInputType.emailAddress,
-                  ),
-                  const SizedBox(height: 20),
+                    _buildTextFormField(
+                      controller: _emailController,
+                      hintText: "Email Address",
+                      icon: Icons.email_outlined,
+                      keyboardType: TextInputType.emailAddress,
+                      validator: (val) {
+                        if (val == null || val.isEmpty) return "Enter your email";
+                        if (!RegExp(r'\S+@\S+\.\S+').hasMatch(val)) return "Invalid email address";
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 20),
 
-                  _buildPasswordField(),
-                  const SizedBox(height: 10),
-                  
-                  _buildForgotPasswordButton(),
-                  const SizedBox(height: 20),
+                    _buildPasswordField(),
+                    const SizedBox(height: 10),
+                    
+                    _buildForgotPasswordButton(),
+                    const SizedBox(height: 20),
 
-                  _buildLoginButton(),
-                  const SizedBox(height: 20),
+                    _buildLoginButton(),
+                    const SizedBox(height: 20),
 
-                  _buildDivider(),
-                  const SizedBox(height: 20),
+                    _buildDivider(),
+                    const SizedBox(height: 20),
 
-                  _buildGoogleLoginButton(),
-                  const SizedBox(height: 24),
+                    _buildGoogleLoginButton(),
+                    const SizedBox(height: 24),
 
-                  _buildSignupLink(),
-                ],
+                    _buildSignupLink(),
+                  ],
+                ),
               ),
             ),
           ),
@@ -228,73 +244,87 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  Widget _buildTextField({
+  Widget _buildTextFormField({
     required TextEditingController controller,
     required String hintText,
     required IconData icon,
     TextInputType keyboardType = TextInputType.text,
+    String? Function(String?)? validator,
   }) {
-    return TextField(
+    return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
+      validator: validator,
       decoration: InputDecoration(
         hintText: hintText,
         prefixIcon: Icon(icon, color: Colors.grey[500]),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
       ),
     );
   }
 
   Widget _buildPasswordField() {
-    return TextField(
+    return TextFormField(
       controller: _passwordController,
       obscureText: !_isPasswordVisible,
+      validator: (val) => val!.isEmpty ? "Enter your password" : null,
       decoration: InputDecoration(
         hintText: "Password",
         prefixIcon: Icon(Icons.lock_outline, color: Colors.grey[500]),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
         suffixIcon: IconButton(
           icon: Icon(
             _isPasswordVisible ? Icons.visibility_off : Icons.visibility,
             color: Colors.grey[500],
           ),
-          onPressed: () {
-            setState(() {
-              _isPasswordVisible = !_isPasswordVisible;
-            });
-          },
+          onPressed: () => setState(() => _isPasswordVisible = !_isPasswordVisible),
         ),
       ),
     );
   }
 
+  // ✅ FIXED: Full Forgot Password Implementation
   Widget _buildForgotPasswordButton() {
-      return Align(
-        alignment: Alignment.centerRight,
-        child: TextButton(
-          onPressed: () {
-            // TODO: Implement forgot password logic
-          },
-          child: Text(
-            "Forgot Password?",
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.primary,
-              fontWeight: FontWeight.w600,
-            ),
+    return Align(
+      alignment: Alignment.centerRight,
+      child: GestureDetector(
+        onTap: _showForgotPasswordDialog,
+        child: Text(
+          "Forgot Password?",
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.primary,
+            fontWeight: FontWeight.w600,
           ),
         ),
-      );
+      ),
+    );
   }
 
   Widget _buildLoginButton() {
     return SizedBox(
       height: 55,
-      child: ElevatedButton(
-        onPressed: _isLoading ? null : _handleLogin,
-        child: _isLoading
-            ? CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Theme.of(context).colorScheme.onPrimary),
-              )
-            : const Text("Login"),
-      ),
+      child: _isLoading
+          ? const SignupShimmerButton()
+          : ElevatedButton(
+              onPressed: _handleLogin,
+              style: ElevatedButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text(
+                "Login",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
     );
   }
 
@@ -304,13 +334,7 @@ class _LoginPageState extends State<LoginPage> {
         Expanded(child: Divider(color: Colors.grey[400])),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12.0),
-          child: Text(
-            "OR",
-            style: TextStyle(
-              color: Colors.grey[600],
-              fontWeight: FontWeight.w500,
-            ),
-          ),
+          child: Text("OR", style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.w500)),
         ),
         Expanded(child: Divider(color: Colors.grey[400])),
       ],
@@ -323,22 +347,11 @@ class _LoginPageState extends State<LoginPage> {
       height: 55,
       child: OutlinedButton.icon(
         onPressed: _isLoading ? null : _handleGoogleLogin,
-        icon: Image.asset(
-          'images/icons/google.png',
-          height: 24.0,
-        ),
-        label: Text(
-          "Sign in with Google",
-          style: theme.textTheme.labelLarge?.copyWith(
-            color: theme.colorScheme.onSurface.withOpacity(0.8),
-          ),
-        ),
+        icon: Image.asset('images/icons/google.png', height: 24.0, errorBuilder: (c,e,s) => const Icon(Icons.login)),
+        label: Text("Sign in with Google", style: theme.textTheme.labelLarge),
         style: OutlinedButton.styleFrom(
-          backgroundColor: theme.colorScheme.surface,
           side: BorderSide(color: Colors.grey.shade300),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       ),
     );
@@ -347,28 +360,15 @@ class _LoginPageState extends State<LoginPage> {
   Widget _buildSignupLink() {
     final textTheme = Theme.of(context).textTheme;
     final colorScheme = Theme.of(context).colorScheme;
-
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text(
-          "Don't have an account?",
-          style: textTheme.bodyMedium?.copyWith(color: Colors.grey[700]),
-        ),
+        Text("Don't have an account?", style: textTheme.bodyMedium?.copyWith(color: Colors.grey[700])),
         TextButton(
           onPressed: () {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => const SignupPage()),
-            );
+            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const SignupPage()));
           },
-          child: Text(
-            "Sign Up",
-            style: textTheme.bodyMedium?.copyWith(
-              color: colorScheme.primary,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+          child: Text("Sign Up", style: textTheme.bodyMedium?.copyWith(color: colorScheme.primary, fontWeight: FontWeight.bold)),
         )
       ],
     );

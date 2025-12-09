@@ -1,12 +1,11 @@
-// lib/pages/onboarding_screen.dart (Optimized and Visually Improved)
-
 import 'package:ecommerce_shop/pages/signup.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lottie/lottie.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 
-// No changes needed for the data model
+// Data Model
 class OnboardingItem {
   final String imagePath;
   final String title;
@@ -20,7 +19,9 @@ class OnboardingItem {
 }
 
 class OnboardingScreen extends StatefulWidget {
-  const OnboardingScreen({super.key});
+  final VoidCallback? onComplete;
+
+  const OnboardingScreen({super.key, this.onComplete});
 
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -28,7 +29,6 @@ class OnboardingScreen extends StatefulWidget {
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final _controller = PageController();
-  // 1. We now track the current page index for optimization
   int _currentPageIndex = 0;
 
   final List<OnboardingItem> _onboardingData = [
@@ -55,16 +55,27 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     super.dispose();
   }
 
-  void _navigateToSignup() {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const SignupPage()),
-    );
+  // --- FIXED: Handle onboarding completion with callback OR navigation ---
+  Future<void> _completeOnboarding() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('seenOnboarding', true);
+
+    if (!mounted) return;
+
+    // If callback provided (from RootWrapper), use it to rebuild
+    if (widget.onComplete != null) {
+      widget.onComplete!();
+    } else {
+      // Fallback: Navigate to SignupPage (for direct launches)
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const SignupPage()),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // We can derive if it's the last page directly in the build method
     final isLastPage = _currentPageIndex == _onboardingData.length - 1;
 
     return Scaffold(
@@ -81,11 +92,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             itemBuilder: (context, index) {
               return OnboardingPage(
                 item: _onboardingData[index],
-                // 2. We pass the active status to each page for performance control
                 isActive: index == _currentPageIndex,
               );
             },
           ),
+          // Navigation Controls
           Positioned(
             bottom: 30.0,
             left: 20.0,
@@ -95,26 +106,39 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               children: [
                 // Skip Button
                 TextButton(
-                  onPressed: _navigateToSignup,
-                  child: Text('Skip', style: GoogleFonts.poppins(fontWeight: FontWeight.w500)),
-                ),
-                // Dot Indicator
-                SmoothPageIndicator(
-                  controller: _controller,
-                  count: _onboardingData.length,
-                  effect: WormEffect(
-                    spacing: 12,
-                    dotColor: Colors.grey.shade400,
-                    activeDotColor: Theme.of(context).primaryColor,
+                  onPressed: _completeOnboarding,
+                  child: Text(
+                    'Skip',
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w500,
+                      color: Colors.grey,
+                    ),
                   ),
                 ),
+                // Dot Indicator
+                // Dot Indicator
+SmoothPageIndicator(
+  controller: _controller,
+  count: _onboardingData.length,
+  effect: WormEffect(
+    spacing: 12,
+    dotColor: Colors.blue.shade200, // Light blue for inactive dots
+    activeDotColor: Colors.blue.shade600, // Kartsy blue for active dot
+  ),
+),
                 // Next/Get Started Button
                 SizedBox(
-                  width: 80, // Give the button a fixed width
+                  width: 80,
                   child: isLastPage
                       ? TextButton(
-                          onPressed: _navigateToSignup,
-                          child: Text('Done', style: GoogleFonts.poppins(fontWeight: FontWeight.w500)),
+                          onPressed: _completeOnboarding,
+                          child: Text(
+                            'Done',
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).primaryColor,
+                            ),
+                          ),
                         )
                       : IconButton(
                           icon: const Icon(Icons.arrow_forward_ios),
@@ -135,10 +159,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 }
 
-// 3. The OnboardingPage has been completely redesigned for clarity and performance
+// Visual Page Component
 class OnboardingPage extends StatelessWidget {
   final OnboardingItem item;
-  final bool isActive; // New parameter to control animation
+  final bool isActive;
 
   const OnboardingPage({
     super.key,
@@ -148,53 +172,58 @@ class OnboardingPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Get theme colors for adaptability
     final theme = Theme.of(context);
     final backgroundColor = theme.scaffoldBackgroundColor;
-    final titleStyle = theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold);
-    final descriptionStyle = theme.textTheme.bodyLarge;
+
+    final titleStyle = GoogleFonts.poppins(
+      textStyle: theme.textTheme.headlineSmall,
+      fontWeight: FontWeight.bold,
+    );
+
+    final descriptionStyle = GoogleFonts.poppins(
+      textStyle: theme.textTheme.bodyMedium,
+      color: Colors.grey[600],
+    );
 
     return Column(
       children: [
         // Top part for the animation
         Expanded(
-          flex: 6, // Give more space to the animation
+          flex: 6,
           child: Container(
             padding: const EdgeInsets.all(32.0),
             child: Lottie.asset(
               item.imagePath,
-              // 4. This is the key performance optimization!
-              // The animation only plays if the page is active.
               animate: isActive,
+              errorBuilder: (context, error, stackTrace) {
+                return Icon(Icons.shopping_bag, size: 100, color: Colors.grey[300]);
+              },
             ),
           ),
         ),
         // Bottom part for the text content
         Expanded(
-          flex: 4, // Give less space to the text
+          flex: 4,
           child: Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 40.0),
-            // The solid background guarantees readability
             decoration: BoxDecoration(
               color: backgroundColor,
-              // Optional: add a subtle top border
-              border: Border(top: BorderSide(color: theme.dividerColor, width: 1.0))
             ),
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.start,
               children: [
+                const SizedBox(height: 20),
                 Text(
                   item.title,
                   textAlign: TextAlign.center,
-                  style: GoogleFonts.poppins(textStyle: titleStyle),
+                  style: titleStyle,
                 ),
                 const SizedBox(height: 16),
                 Text(
                   item.description,
                   textAlign: TextAlign.center,
-                  style: GoogleFonts.poppins(textStyle: descriptionStyle),
+                  style: descriptionStyle,
                 ),
               ],
             ),

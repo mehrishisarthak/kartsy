@@ -50,8 +50,6 @@ class DatabaseMethods {
         .where('category', isEqualTo: category)
         .snapshots();
   }
-
-  // ... (Rest of your methods remain exactly the same) ...
   
   Future<void> addToCart(String userId, Map<String, dynamic> product) async {
     final cartRef = _firestore.collection('users').doc(userId).collection('cart').doc(product['id']);
@@ -102,7 +100,7 @@ class DatabaseMethods {
     try {
       final userOrderRef = _firestore.collection('users').doc(userId).collection('orders').doc();
       final consolidatedOrderId = userOrderRef.id;
-
+      //iterate through all items in cart and add operation in batch for each item
       for (final productData in cartItems) {
         final adminId = productData['adminId'];
         final productId = productData['id'];
@@ -111,7 +109,7 @@ class DatabaseMethods {
         if (adminId == null || adminId.isEmpty) {
           continue;
         }
-
+        //add confirmed order for admin pannel in batch for each item
         final adminOrderRef = _firestore.collection('Admin').doc(adminId).collection('orders').doc();
         batch.set(adminOrderRef, {
           'productName': productData['Name'],
@@ -124,7 +122,7 @@ class DatabaseMethods {
           'timestamp': FieldValue.serverTimestamp(),
           'consolidatedOrderId': consolidatedOrderId,
         });
-        
+        // reduce the item inventory from admin
         final productRef = _firestore.collection('products').doc(productId);
         batch.update(productRef, {'inventory': FieldValue.increment(-quantity)});
       }
@@ -137,13 +135,14 @@ class DatabaseMethods {
         'orderStatus': 'Pending',
         'timestamp': FieldValue.serverTimestamp(),
       });
-
+      //delete items from cart of user (add in batch operation)
       final cartQuerySnapshot = await _firestore.collection('users').doc(userId).collection('cart').get();
       for (final doc in cartQuerySnapshot.docs) {
         batch.delete(doc.reference);
       }
-
+      //all operations take place at once or not at all once we commit the batch, avoiding race conditions
       await batch.commit();
+      //we clear the cart provider
       cartProvider.clearCart();
 
       return "Order placed successfully!";

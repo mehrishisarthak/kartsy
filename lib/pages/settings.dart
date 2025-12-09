@@ -1,4 +1,3 @@
-import 'package:ecommerce_shop/pages/signup.dart';
 import 'package:ecommerce_shop/services/shared_preferences.dart';
 import 'package:ecommerce_shop/theme/theme_provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -20,9 +19,9 @@ class SettingsPage extends StatelessWidget {
     }
   }
 
-  // This function handles the logout logic (it remains unchanged).
+  // --- LOGOUT LOGIC ---
   Future<void> _handleLogout(BuildContext context) async {
-    bool? confirmLogout = await showDialog<bool>(
+    final confirmLogout = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Confirm Logout'),
@@ -41,21 +40,21 @@ class SettingsPage extends StatelessWidget {
     );
 
     if (confirmLogout == true) {
+      // 1. Clear local cache
       await SharedPreferenceHelper().clearUserInfo();
-      await FirebaseAuth.instance.signOut();
+
+      // 2. Sign out from Firebase
+      await FirebaseAuth.instance.signOut(); // signs out current user [web:1][web:17]
 
       if (context.mounted) {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (context) => const SignupPage()),
-          (Route<dynamic> route) => false,
-        );
+        // 3. Clear navigation stack and go to auth entry (RootWrapper / Login)
+        Navigator.of(context).popUntil((route) => route.isFirst); // pops back to first route [web:13][web:16]
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Get the provider, but we no longer need to calculate 'isDarkMode'.
     final themeProvider = Provider.of<ThemeProvider>(context);
 
     return Scaffold(
@@ -67,28 +66,26 @@ class SettingsPage extends StatelessWidget {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            // --- UPDATED THEME SELECTOR ---
+            // --- THEME SELECTOR ---
             Card(
               child: ListTile(
                 leading: const Icon(Icons.palette_outlined),
                 title: const Text('Theme'),
-                // Shows the currently selected theme (e.g., "System")
                 subtitle: Text(_getTextForTheme(themeProvider.themeMode)),
                 trailing: PopupMenuButton<ThemeMode>(
                   onSelected: (mode) {
-                    // Call the new method to set the theme
                     themeProvider.setThemeMode(mode);
                   },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(
                       value: ThemeMode.system,
                       child: Text('System'),
                     ),
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: ThemeMode.light,
                       child: Text('Light'),
                     ),
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: ThemeMode.dark,
                       child: Text('Dark'),
                     ),

@@ -17,7 +17,9 @@ import 'package:flutter/foundation.dart'
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
-      return web;
+      throw UnsupportedError(
+          'DefaultFirebaseOptions are not supported for this platform.',
+        );
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
@@ -25,9 +27,15 @@ class DefaultFirebaseOptions {
       case TargetPlatform.iOS:
         return ios;
       case TargetPlatform.macOS:
-        return macos;
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for macOS - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
       case TargetPlatform.windows:
-        return windows;
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for windows - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
       case TargetPlatform.linux:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for linux - '
@@ -41,8 +49,8 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyD4JZVYsdyNOCJYwwO97oVULjNXnfFHSYk',
-    appId: '1:52345924540:android:aa22e653ea0a54b41b59b9',
+    apiKey: 'AIzaSyDKt5NHM1GvxQUsdIrILd5SBg8FK_tAzjs',
+    appId: '1:52345924540:android:512ebc4a491037371b59b9',
     messagingSenderId: '52345924540',
     projectId: 'kartsyapp-87532',
     storageBucket: 'kartsyapp-87532.firebasestorage.app',
@@ -54,37 +62,9 @@ class DefaultFirebaseOptions {
     messagingSenderId: '52345924540',
     projectId: 'kartsyapp-87532',
     storageBucket: 'kartsyapp-87532.firebasestorage.app',
+    androidClientId: '52345924540-3a9ho54cbrlsacvfnbgqlm511dcsg1it.apps.googleusercontent.com',
     iosClientId: '52345924540-gmc86dl2ee1k74navpjnhm2dlrejrq8g.apps.googleusercontent.com',
     iosBundleId: 'com.classified.ecommerceShop',
-  );
-
-  static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyD6G7mGDXdv8DYr-HIBlXfrit2c_jJykkE',
-    appId: '1:507353148295:web:1aaad993c730dd30dc8122',
-    messagingSenderId: '507353148295',
-    projectId: 'kartsy-3ff24',
-    authDomain: 'kartsy-3ff24.firebaseapp.com',
-    storageBucket: 'kartsy-3ff24.firebasestorage.app',
-    measurementId: 'G-DNJ2F21Z0P',
-  );
-
-  static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyADwwZ0NJcOPtr17jIP0wNSneJUvm06b7E',
-    appId: '1:507353148295:ios:7dc7da17859290aadc8122',
-    messagingSenderId: '507353148295',
-    projectId: 'kartsy-3ff24',
-    storageBucket: 'kartsy-3ff24.firebasestorage.app',
-    iosBundleId: 'com.classified.ecommerceShop',
-  );
-
-  static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyD6G7mGDXdv8DYr-HIBlXfrit2c_jJykkE',
-    appId: '1:507353148295:web:4bc61d14fe0ec172dc8122',
-    messagingSenderId: '507353148295',
-    projectId: 'kartsy-3ff24',
-    authDomain: 'kartsy-3ff24.firebaseapp.com',
-    storageBucket: 'kartsy-3ff24.firebasestorage.app',
-    measurementId: 'G-CCBWNYJEEM',
   );
 
 }

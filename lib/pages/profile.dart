@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ecommerce_shop/pages/admin_login.dart';
-import 'package:ecommerce_shop/pages/order_screen.dart'; // Ensure this matches your file name (UserOrdersPage)
+import 'package:ecommerce_shop/pages/order_screen.dart'; 
 import 'package:ecommerce_shop/pages/settings.dart';
 import 'package:ecommerce_shop/services/shared_preferences.dart';
 import 'package:ecommerce_shop/services/shimmer/profile_shimmer.dart';
@@ -10,10 +10,10 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key, required this.userId});
-
   final String? userId;
 
   @override
@@ -21,7 +21,7 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  // --- State Variables ---
+  // Indian states and cities data
   static const Map<String, List<String>> indianStatesAndCities = {
     'Andaman and Nicobar Islands': ['Port Blair', 'Garacharma', 'Bambooflat'],
     'Andhra Pradesh': ['Visakhapatnam', 'Vijayawada', 'Guntur', 'Tirupati', 'Nellore', 'Kurnool', 'Rajahmundry', 'Kakinada', 'Anantapur', 'Eluru', 'Kadapa', 'Chittoor', 'Srikakulam'],
@@ -39,7 +39,7 @@ class _ProfilePageState extends State<ProfilePage> {
     'Jammu and Kashmir': ['Srinagar', 'Jammu', 'Anantnag', 'Baramulla', 'Udhampur', 'Kathua', 'Sopore'],
     'Jharkhand': ['Ranchi', 'Jamshedpur', 'Dhanbad', 'Bokaro Steel City', 'Deoghar', 'Hazaribagh'],
     'Karnataka': ['Bengaluru', 'Mysuru', 'Hubli-Dharwad', 'Mangaluru', 'Belagavi', 'Ballari', 'Shivamogga', 'Udupi'],
-    'Kerala': ['Thiruvananthapuram', 'Kochi', 'Kozhikode', 'Thrissur', 'Alappuzha', 'Kollam', 'Kannur', 'Palakkad'],
+    'Kerala': ['Thiruvananthapuram', 'Kochi', 'Kozhikode', 'Thrissur', 'Alappala', 'Kollam', 'Kannur', 'Palakkad'],
     'Ladakh': ['Leh', 'Kargil'],
     'Lakshadweep': ['Kavaratti', 'Agatti', 'Minicoy', 'Andrott'],
     'Madhya Pradesh': ['Indore', 'Bhopal', 'Jabalpur', 'Gwalior', 'Ujjain', 'Sagar', 'Rewa', 'Satna'],
@@ -63,6 +63,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   final SharedPreferenceHelper _prefs = SharedPreferenceHelper();
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  
   Map<String, dynamic>? personData;
   File? _imageFile;
   bool _isLoading = false;
@@ -74,7 +75,7 @@ class _ProfilePageState extends State<ProfilePage> {
   final TextEditingController _pincodeController = TextEditingController();
   final TextEditingController _mobileController = TextEditingController();
 
-  // OTP and Phone Verification State
+  // Phone verification state
   bool _isPhoneVerified = false;
   String? _verificationId;
   String _verifiedPhoneNumber = '';
@@ -87,9 +88,7 @@ class _ProfilePageState extends State<ProfilePage> {
     loadUserData();
     _mobileController.addListener(() {
       if (_isPhoneVerified && '+91${_mobileController.text.trim()}' != _verifiedPhoneNumber) {
-        setState(() {
-          _isPhoneVerified = false;
-        });
+        setState(() => _isPhoneVerified = false);
       }
     });
   }
@@ -102,21 +101,25 @@ class _ProfilePageState extends State<ProfilePage> {
     super.dispose();
   }
 
-  /// Loads user data, prioritizing local cache before fetching from Firestore.
+  /// Loads user data from Firestore + cache
   Future<void> loadUserData() async {
     try {
-      // Attempt to load from SharedPreferences first for a faster UI response
+      // Load cache first for instant UI
       final cachedAddress = await _prefs.getUserAddress();
       if (cachedAddress != null && mounted) {
         _updateAddressFields(cachedAddress);
       }
 
-      final doc = await FirebaseFirestore.instance.collection('users').doc(userID).get();
+      // Fetch fresh from Firestore
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userID)
+          .get();
+      
       if (doc.exists && mounted) {
         final firestoreData = doc.data()!;
-        setState(() {
-          personData = firestoreData;
-        });
+        setState(() => personData = firestoreData);
+        
         final address = firestoreData['Address'];
         if (address is Map<String, dynamic>) {
           _updateAddressFields(address);
@@ -128,7 +131,7 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  /// Helper to update state and controllers from an address map.
+  /// Update form fields from address data
   void _updateAddressFields(Map<String, dynamic> address) {
     setState(() {
       _selectedState = address['state'];
@@ -138,10 +141,11 @@ class _ProfilePageState extends State<ProfilePage> {
       _selectedCity = address['city'];
       _localAddressController.text = address['local'] ?? '';
       _pincodeController.text = address['pincode'] ?? '';
+      
       final mobile = address['mobile'] ?? '';
       _mobileController.text = mobile.replaceFirst('+91', '');
 
-      // Check if the stored number is verified
+      // Auto-verify if matches current user phone
       final currentUser = _auth.currentUser;
       if (currentUser != null && currentUser.phoneNumber == mobile && mobile.isNotEmpty) {
         _isPhoneVerified = true;
@@ -150,12 +154,33 @@ class _ProfilePageState extends State<ProfilePage> {
     });
   }
 
+  /// Pick and compress profile image
   Future<void> _pickImage() async {
-    final picked = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 70);
-    if (picked != null) {
-      setState(() {
-        _imageFile = File(picked.path);
-      });
+    try {
+      final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
+      if (picked != null) {
+        File imageFile = File(picked.path);
+        
+        // Compress if >1MB
+        int sizeInBytes = await imageFile.length();
+        double sizeInMB = sizeInBytes / (1024 * 1024);
+        
+        if (sizeInMB > 1.0) {
+          final String targetPath = '${imageFile.parent.path}/${DateTime.now().millisecondsSinceEpoch}_compressed.jpg';
+          var result = await FlutterImageCompress.compressAndGetFile(
+            imageFile.absolute.path,
+            targetPath,
+            quality: 70,
+            minWidth: 1080,
+            minHeight: 1080,
+          );
+          if (result != null) imageFile = File(result.path);
+        }
+        
+        setState(() => _imageFile = imageFile);
+      }
+    } catch (e) {
+      _showErrorSnackBar("Failed to pick image: $e");
     }
   }
 
@@ -167,7 +192,7 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  /// Checks if a phone number is already in use before sending an OTP.
+  /// Verify phone number with OTP
   Future<void> _verifyPhoneNumber() async {
     if (_mobileController.text.trim().length != 10) {
       _showErrorSnackBar("Please enter a valid 10-digit mobile number.");
@@ -180,18 +205,17 @@ class _ProfilePageState extends State<ProfilePage> {
       final phoneNumber = '+91${_mobileController.text.trim()}';
       final currentUser = _auth.currentUser;
 
-      // --- Check if phone number already exists ---
+      // Check if phone belongs to another user
       final querySnapshot = await FirebaseFirestore.instance
           .collection('users')
           .where('Address.mobile', isEqualTo: phoneNumber)
           .limit(1)
           .get();
-      // If a document is found and it's not the current user's number
+      
       if (querySnapshot.docs.isNotEmpty && querySnapshot.docs.first.id != currentUser?.uid) {
         _showErrorSnackBar("Phone number is already in use by another account.");
         return;
       }
-      // --- End of check ---
 
       await _auth.verifyPhoneNumber(
         phoneNumber: phoneNumber,
@@ -203,35 +227,27 @@ class _ProfilePageState extends State<ProfilePage> {
                 _isPhoneVerified = true;
                 _verifiedPhoneNumber = phoneNumber;
               });
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Phone number verified automatically!"), backgroundColor: Colors.green));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Phone number verified automatically!"), backgroundColor: Colors.green)
+              );
             }
           } catch (e) {
-            if (mounted) {
-              _showErrorSnackBar("Failed to link credential: ${e.toString()}");
-            }
+            if (mounted) _showErrorSnackBar("Failed to link credential: ${e.toString()}");
           } finally {
             if (mounted) setState(() => _isLoading = false);
           }
         },
         verificationFailed: (FirebaseAuthException e) {
-          if (mounted) {
-            _showErrorSnackBar("Failed to verify phone number: ${e.message}");
-          }
+          if (mounted) _showErrorSnackBar("Failed to verify phone number: ${e.message}");
         },
         codeSent: (String verificationId, int? resendToken) {
           if (mounted) {
-            setState(() {
-              _verificationId = verificationId;
-            });
+            setState(() => _verificationId = verificationId);
             _showOTPEntryDialog();
           }
         },
         codeAutoRetrievalTimeout: (String verificationId) {
-          if (mounted) {
-            setState(() {
-              _verificationId = verificationId;
-            });
-          }
+          if (mounted) setState(() => _verificationId = verificationId);
         },
       );
     } catch (e) {
@@ -270,10 +286,10 @@ class _ProfilePageState extends State<ProfilePage> {
                     _isPhoneVerified = true;
                     _verifiedPhoneNumber = '+91${_mobileController.text.trim()}';
                   });
-                  // ignore: use_build_context_synchronously
                   Navigator.pop(context);
-                  // ignore: use_build_context_synchronously
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Phone number verified successfully!"), backgroundColor: Colors.green));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Phone number verified successfully!"), backgroundColor: Colors.green)
+                  );
                 }
               } catch (e) {
                 _showErrorSnackBar("Invalid OTP. Please try again.");
@@ -286,20 +302,24 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  /// Saves the profile to Firestore and caches the address locally.
+  /// ✅ FIXED: Complete profile save with proper error handling
   Future<void> _saveProfile() async {
     if (!_isPhoneVerified) {
       _showErrorSnackBar("Please verify your phone number before saving.");
       return;
     }
-    if (_selectedState == null || _selectedCity == null || _localAddressController.text.trim().isEmpty || _pincodeController.text.trim().length != 6) {
+    if (_selectedState == null || _selectedCity == null || 
+        _localAddressController.text.trim().isEmpty || 
+        _pincodeController.text.trim().length != 6) {
       _showErrorSnackBar("Please fill all address fields correctly.");
       return;
     }
     
     setState(() => _isLoading = true);
-    final userID = await _prefs.getUserID();
+    final userID = FirebaseAuth.instance.currentUser?.uid;
+
     if (userID == null) {
+      _showErrorSnackBar("Session expired. Please login again.");
       setState(() => _isLoading = false);
       return;
     }
@@ -307,12 +327,20 @@ class _ProfilePageState extends State<ProfilePage> {
     String? imageUrl = personData?['Image'];
 
     try {
+      // 1. Upload new image if selected
       if (_imageFile != null) {
-        final storageRef = FirebaseStorage.instance.ref().child('profile_images').child('$userID.jpg');
-        await storageRef.putFile(_imageFile!);
+        print('📸 Uploading image for user: $userID');
+        final storageRef = FirebaseStorage.instance
+            .ref()
+            .child('profile_images')
+            .child('$userID.jpg');
+        final uploadTask = storageRef.putFile(_imageFile!);
+        await uploadTask;
         imageUrl = await storageRef.getDownloadURL();
+        print('✅ Image uploaded: $imageUrl');
       }
 
+      // 2. Structure address
       final structuredAddress = {
         'state': _selectedState,
         'city': _selectedCity,
@@ -321,37 +349,82 @@ class _ProfilePageState extends State<ProfilePage> {
         'mobile': _verifiedPhoneNumber,
       };
 
-      // Perform saves concurrently
-      await Future.wait([
-        FirebaseFirestore.instance.collection('users').doc(userID).update({'Address': structuredAddress, 'Image': imageUrl}),
-        _prefs.saveUserAddress(structuredAddress), // Save address to SharedPreferences
-      ]);
+      // 3. Complete user profile
+      final completeUserProfile = {
+        'Name': personData?['Name'] ?? _auth.currentUser?.displayName ?? 'User',
+        'Email': personData?['Email'] ?? _auth.currentUser?.email ?? '',
+        'Image': imageUrl,
+        'Address': structuredAddress,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
+      print('💾 Saving profile to Firestore: $userID');
+      print('📍 Address: $structuredAddress');
+
+      // 4. ✅ FIXED: Use set() with merge: true (creates doc if missing)
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userID)
+          .set(completeUserProfile, SetOptions(merge: true));
+
+      // 5. Cache locally
+      await _prefs.saveUserAddress(structuredAddress);
+      
+      print('✅ Profile saved successfully for user: $userID');
       
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile updated successfully!'), backgroundColor: Colors.green));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profile updated successfully!'), backgroundColor: Colors.green)
+        );
       }
-    } catch (e) {
-      if (mounted) _showErrorSnackBar('Failed to save profile.');
+      
+      // Refresh data
+      await loadUserData();
+      
+    } catch (e, stackTrace) {
+      print('❌ Save failed: $e');
+      print('Stack trace: $stackTrace');
+      if (mounted) _showErrorSnackBar('Failed to save profile: ${e.toString()}');
     } finally {
       if (mounted) {
-        setState(() { _isLoading = false; _imageFile = null; });
+        setState(() { 
+          _isLoading = false; 
+          _imageFile = null; 
+        });
       }
-      loadUserData();
     }
   }
 
-  Widget _buildDropdown({required String hint, required String? value, required List<String> items, required void Function(String?)? onChanged}) {
+  Widget _buildDropdown({
+    required String hint,
+    required String? value,
+    required List<String> items,
+    required void Function(String?)? onChanged,
+  }) {
     return DropdownButtonFormField<String>(
-      initialValue: value,
+      value: value,
       hint: Text(hint, style: TextStyle(color: Colors.grey[600])),
       isExpanded: true,
-      items: items.map((String item) => DropdownMenuItem<String>(value: item, child: Text(item, overflow: TextOverflow.ellipsis))).toList(),
+      items: items
+          .map((String item) => DropdownMenuItem<String>(
+                value: item,
+                child: Text(item, overflow: TextOverflow.ellipsis),
+              ))
+          .toList(),
       onChanged: onChanged,
       decoration: const InputDecoration(),
     );
   }
 
-  Widget _buildTextField({required TextEditingController controller, required String hintText, required IconData icon, TextInputType keyboardType = TextInputType.text, List<TextInputFormatter>? inputFormatters, String? prefixText}) {
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String hintText,
+    required IconData icon,
+    TextInputType keyboardType = TextInputType.text,
+    List<TextInputFormatter>? inputFormatters,
+    String? prefixText,
+  }) {
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
@@ -382,28 +455,35 @@ class _ProfilePageState extends State<ProfilePage> {
     return Scaffold(
       appBar: AppBar(
         actions: [
-          // New orders button
           IconButton(
             icon: const Icon(Icons.shopping_bag_outlined),
             onPressed: () {
               if (widget.userId != null) {
-                // Ensure UserOrdersPage is imported correctly
                 Navigator.of(context).push(
-                  MaterialPageRoute(builder: (context) => UserOrdersPage(userId: widget.userId!)),
+                  MaterialPageRoute(
+                    builder: (context) => UserOrdersPage(userId: widget.userId!),
+                  ),
                 );
               } else {
                 _showErrorSnackBar("User ID not found. Please log in.");
               }
             },
           ),
-          IconButton(icon: const Icon(Icons.settings), onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const SettingsPage()))),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (context) => const SettingsPage()),
+            ),
+          ),
         ],
-        leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.pop(context)),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
         title: const Text("Edit Profile"),
       ),
-      // --- CHANGED: Use ProfileShimmer when data is loading ---
       body: personData == null
-          ? const ProfileShimmer() 
+          ? const ProfileShimmer()
           : SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(24, 24, 24, 120),
               child: Column(
@@ -416,21 +496,37 @@ class _ProfilePageState extends State<ProfilePage> {
                       children: [
                         Container(
                           padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(border: Border.all(color: colorScheme.primary, width: 3), shape: BoxShape.circle),
-                          child: CircleAvatar(radius: 60, backgroundColor: colorScheme.surface, backgroundImage: imageProvider),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: colorScheme.primary, width: 3),
+                            shape: BoxShape.circle,
+                          ),
+                          child: CircleAvatar(
+                            radius: 60,
+                            backgroundColor: colorScheme.surface,
+                            backgroundImage: imageProvider,
+                          ),
                         ),
                         Container(
                           padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(color: colorScheme.primary, shape: BoxShape.circle),
+                          decoration: BoxDecoration(
+                            color: colorScheme.primary,
+                            shape: BoxShape.circle,
+                          ),
                           child: Icon(Icons.edit, color: colorScheme.onPrimary, size: 20),
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 12),
-                  Text(personData!['Name'] ?? 'No Name', style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                  Text(
+                    personData!['Name'] ?? 'No Name',
+                    style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 6),
-                  Text("Email: ${personData!['Email'] ?? 'Not Provided'}", style: textTheme.titleMedium?.copyWith(color: Colors.grey[700])),
+                  Text(
+                    "Email: ${personData!['Email'] ?? 'Not Provided'}",
+                    style: textTheme.titleMedium?.copyWith(color: Colors.grey[700]),
+                  ),
                   const SizedBox(height: 30),
                   Card(
                     child: Padding(
@@ -438,13 +534,19 @@ class _ProfilePageState extends State<ProfilePage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text("Contact & Address Info", style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                          Text(
+                            "Contact & Address Info",
+                            style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                          ),
                           const SizedBox(height: 20),
                           TextFormField(
                             controller: _mobileController,
                             keyboardType: TextInputType.phone,
                             readOnly: _isPhoneVerified,
-                            inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(10)],
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(10),
+                            ],
                             decoration: InputDecoration(
                               hintText: "98765 43210",
                               prefixIcon: Icon(Icons.phone_android, color: colorScheme.primary),
@@ -453,10 +555,27 @@ class _ProfilePageState extends State<ProfilePage> {
                               suffixIcon: TextButton(
                                 onPressed: _isPhoneVerified ? null : _verifyPhoneNumber,
                                 child: _isLoading
-                                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                                    : _isPhoneVerified 
-                                        ? Row(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.check_circle, color: Colors.green), const SizedBox(width: 4), Text("Verified", style: TextStyle(color: colorScheme.onSurface))])
-                                        : Text("Verify", style: TextStyle(color: colorScheme.primary)),
+                                    ? const SizedBox(
+                                        height: 20,
+                                        width: 20,
+                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                      )
+                                    : _isPhoneVerified
+                                        ? Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Icon(Icons.check_circle, color: Colors.green),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                "Verified",
+                                                style: TextStyle(color: colorScheme.onSurface),
+                                              ),
+                                            ],
+                                          )
+                                        : Text(
+                                            "Verify",
+                                            style: TextStyle(color: colorScheme.primary),
+                                          ),
                               ),
                             ),
                           ),
@@ -478,12 +597,27 @@ class _ProfilePageState extends State<ProfilePage> {
                             hint: "Select City",
                             value: _selectedCity,
                             items: _cities,
-                            onChanged: _selectedState == null ? null : (newValue) => setState(() => _selectedCity = newValue),
+                            onChanged: _selectedState == null
+                                ? null
+                                : (newValue) => setState(() => _selectedCity = newValue),
                           ),
                           const SizedBox(height: 16),
-                          _buildTextField(controller: _localAddressController, hintText: "House No, Street, Landmark", icon: Icons.location_on_outlined),
+                          _buildTextField(
+                            controller: _localAddressController,
+                            hintText: "House No, Street, Landmark",
+                            icon: Icons.location_on_outlined,
+                          ),
                           const SizedBox(height: 16),
-                          _buildTextField(controller: _pincodeController, hintText: "Pincode", icon: Icons.pin_drop_outlined, keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)]),
+                          _buildTextField(
+                            controller: _pincodeController,
+                            hintText: "Pincode",
+                            icon: Icons.pin_drop_outlined,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(6),
+                            ],
+                          ),
                         ],
                       ),
                     ),
@@ -495,13 +629,22 @@ class _ProfilePageState extends State<ProfilePage> {
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: colorScheme.surface,
-          boxShadow: [BoxShadow(color: Colors.black.withAlpha(25), blurRadius: 10, offset: const Offset(0, -4))],
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withAlpha(25),
+              blurRadius: 10,
+              offset: const Offset(0, -4),
+            ),
+          ],
         ),
         child: SizedBox(
           height: 55,
           width: double.infinity,
           child: ElevatedButton(
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminLoginPage())),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const AdminLoginPage()),
+            ),
             child: const Text("Are you an admin? Tap here"),
           ),
         ),
@@ -510,7 +653,14 @@ class _ProfilePageState extends State<ProfilePage> {
         onPressed: _isLoading ? null : _saveProfile,
         label: Text(_isLoading ? "Saving..." : "Save Profile"),
         icon: _isLoading
-            ? SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: colorScheme.onPrimary, strokeWidth: 2))
+            ? SizedBox(
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(
+                  color: colorScheme.onPrimary,
+                  strokeWidth: 2,
+                ),
+              )
             : const Icon(Icons.save),
       ),
     );

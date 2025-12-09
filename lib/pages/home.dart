@@ -5,34 +5,32 @@ import 'package:ecommerce_shop/pages/product_details.dart';
 import 'package:ecommerce_shop/pages/profile.dart';
 import 'package:ecommerce_shop/pages/seach_page.dart';
 import 'package:ecommerce_shop/services/cart_provider.dart';
-import 'package:ecommerce_shop/services/shared_preferences.dart';
 import 'package:ecommerce_shop/services/shimmer/home_shimmer.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, required this.userId});
+  // We can force this to be non-nullable because RootWrapper guarantees it.
+  final String userId; 
 
-  final String? userId;
+  const HomeScreen({super.key, required this.userId});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  String? uid;
   String userName = '';
   String userImageUrl = '';
-  bool _isPageLoading = true; // For the initial page load
+  bool _isPageLoading = true; 
 
   // --- PAGINATION VARIABLES ---
   final ScrollController _horizontalScrollController = ScrollController();
-  List<DocumentSnapshot> _products = [];
+  final List<DocumentSnapshot> _products = [];
   bool _isLoadingMoreProducts = false;
   bool _hasMoreProducts = true;
   DocumentSnapshot? _lastProductDoc;
   
-  // INCREASED BATCH SIZE FOR BETTER UX
   static const int _productsPerBatch = 10; 
 
   static const List<Map<String, String>> categories = [
@@ -46,7 +44,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    uid = widget.userId;
     _initializeData();
 
     // Setup listener for horizontal scrolling (Lazy Loading)
@@ -64,11 +61,10 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  /// Loads User, Cart, and First Batch of Products concurrently
   Future<void> _initializeData() async {
     await Future.wait([
-      _loadUserData(uid!),
-      _loadCartData(uid!),
+      _loadUserData(),
+      _loadCartData(),
       _fetchProducts(),
     ]);
 
@@ -79,48 +75,12 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// Fetches products in batches
-  Future<void> _fetchProducts() async {
-    if (_isLoadingMoreProducts || !_hasMoreProducts) return;
-
-    if (mounted) setState(() => _isLoadingMoreProducts = true);
-
-    try {
-      Query query = FirebaseFirestore.instance
-          .collection('products')
-          .orderBy('Name') // CRITICAL: Deterministic order for pagination
-          .limit(_productsPerBatch);
-
-      if (_lastProductDoc != null) {
-        query = query.startAfterDocument(_lastProductDoc!);
-      }
-
-      QuerySnapshot querySnapshot = await query.get();
-
-      if (querySnapshot.docs.length < _productsPerBatch) {
-        _hasMoreProducts = false;
-      }
-
-      if (querySnapshot.docs.isNotEmpty) {
-        _lastProductDoc = querySnapshot.docs.last;
-        if (mounted) {
-          setState(() {
-            _products.addAll(querySnapshot.docs);
-          });
-        }
-      }
-    } catch (e) {
-      print("Error fetching products: $e");
-    } finally {
-      if (mounted) setState(() => _isLoadingMoreProducts = false);
-    }
-  }
-
-  Future<void> _loadCartData(String userId) async {
+  // 1. UPDATED: Fetch Cart Data using widget.userId
+  Future<void> _loadCartData() async {
     try {
       final cartSnap = await FirebaseFirestore.instance
           .collection('users')
-          .doc(userId)
+          .doc(widget.userId) // Use widget.userId directly
           .collection('cart')
           .get();
 
@@ -143,34 +103,72 @@ class _HomeScreenState extends State<HomeScreen> {
         Provider.of<CartProvider>(context, listen: false).setCart(cartItems);
       }
     } catch (e) {
-      print("Error loading cart data: $e");
+      debugPrint("Error loading cart data: $e");
     }
   }
 
-  Future<void> _loadUserData(String userId) async {
-    final prefs = SharedPreferenceHelper();
-    final name = await prefs.getUserName();
-
-    if (name != null && name.trim().isNotEmpty) {
-      userName = name.trim().split(' ')[0];
-    }
-
+  // 2. FIXED: Fetch User Data strictly from Firestore (No SharedPreferences)
+  Future<void> _loadUserData() async {
     try {
-      final userDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
-      if (userDoc.exists) {
-        userImageUrl = userDoc['Image'] ?? '';
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.userId)
+          .get();
+
+      if (userDoc.exists && mounted) {
+        setState(() {
+          // Robustly handle missing fields
+          final data = userDoc.data();
+          String fullName = data?['Name'] ?? 'User';
+          userName = fullName.split(' ')[0]; // Get First Name
+          userImageUrl = data?['Image'] ?? '';
+        });
       }
     } catch (e) {
-      print("Error loading user image: $e");
+      debugPrint("Error loading user profile: $e");
     }
   }
 
-  // --- HELPER WIDGET: Rating Row ---
+  Future<void> _fetchProducts() async {
+    if (_isLoadingMoreProducts || !_hasMoreProducts) return;
+
+    if (mounted) setState(() => _isLoadingMoreProducts = true);
+
+    try {
+      Query query = FirebaseFirestore.instance
+          .collection('products')
+          .orderBy('Name') 
+          .limit(_productsPerBatch);
+
+      if (_lastProductDoc != null) {
+        query = query.startAfterDocument(_lastProductDoc!);
+      }
+
+      QuerySnapshot querySnapshot = await query.get();
+
+      if (querySnapshot.docs.length < _productsPerBatch) {
+        _hasMoreProducts = false;
+      }
+
+      if (querySnapshot.docs.isNotEmpty) {
+        _lastProductDoc = querySnapshot.docs.last;
+        if (mounted) {
+          setState(() {
+            _products.addAll(querySnapshot.docs);
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint("Error fetching products: $e");
+    } finally {
+      if (mounted) setState(() => _isLoadingMoreProducts = false);
+    }
+  }
+
   Widget _buildRatingRow(Map<String, dynamic> data) {
     double rating = (data['averageRating'] as num?)?.toDouble() ?? 0.0;
     int count = (data['reviewCount'] as num?)?.toInt() ?? 0;
 
-    // Don't show anything if no reviews yet
     if (count == 0) return const SizedBox(height: 5); 
 
     return Padding(
@@ -180,11 +178,11 @@ class _HomeScreenState extends State<HomeScreen> {
           const Icon(Icons.star, color: Colors.amber, size: 14),
           const SizedBox(width: 4),
           Text(
-            rating.toStringAsFixed(1), // e.g. "4.5"
+            rating.toStringAsFixed(1), 
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
           ),
           Text(
-            " ($count)", // e.g. " (12)"
+            " ($count)", 
             style: TextStyle(color: Colors.grey[600], fontSize: 12),
           ),
         ],
@@ -199,7 +197,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final textTheme = theme.textTheme;
 
     return Scaffold(
-      // Use Shimmer when loading
       body: _isPageLoading
           ? const HomeScreenShimmer()
           : SafeArea(
@@ -224,7 +221,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           GestureDetector(
                             onTap: () {
-                              Navigator.push(context, MaterialPageRoute(builder: (_) => ProfilePage(userId: uid)));
+                              Navigator.push(context, MaterialPageRoute(builder: (_) => ProfilePage(userId: widget.userId)));
                             },
                             child: Container(
                               height: 50,
@@ -255,7 +252,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           style: textTheme.titleMedium?.copyWith(color: Colors.grey[600])),
                       const SizedBox(height: 10),
                       
-                      // --- SEARCH BAR (Navigates to SearchPage) ---
+                      // --- SEARCH BAR ---
                       GestureDetector(
                         onTap: () {
                           Navigator.push(context, MaterialPageRoute(builder: (_) => const SearchPage()));
@@ -318,7 +315,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                         borderRadius: BorderRadius.circular(8),
                                         child: Padding(
                                           padding: const EdgeInsets.all(8.0),
-                                          child: Image.asset(categoryItem['image']!, fit: BoxFit.contain),
+                                          child: Image.asset(
+                                            categoryItem['image']!, 
+                                            fit: BoxFit.contain,
+                                            // Handle missing assets gracefully
+                                            errorBuilder: (c, e, s) => const Icon(Icons.category),
+                                          ),
                                         ),
                                       ),
                               ),
@@ -328,7 +330,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 30.0),
 
-                      // --- Featured Products Section (Lazy Loaded) ---
+                      // --- Featured Products ---
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -346,9 +348,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 20.0),
 
-                      // Horizontal ListView
                       SizedBox(
-                        height: 250, // Increased height slightly to accommodate Rating Row
+                        height: 250, 
                         child: _products.isEmpty && !_isPageLoading
                             ? const Center(child: Text("No products found."))
                             : ListView.separated(
@@ -357,7 +358,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                 itemCount: _products.length + (_hasMoreProducts ? 1 : 0),
                                 separatorBuilder: (context, index) => const SizedBox(width: 15),
                                 itemBuilder: (context, index) {
-                                  // Loader at the end
                                   if (index == _products.length) {
                                     return const Center(
                                       child: Padding(
@@ -400,10 +400,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                                   productData['Image'] ?? '',
                                                   width: double.infinity,
                                                   fit: BoxFit.cover,
-                                                  loadingBuilder: (context, child, progress) {
-                                                    if (progress == null) return child;
-                                                    return const Center(child: Icon(Icons.image, color: Colors.grey));
-                                                  },
                                                   errorBuilder: (_, __, ___) =>
                                                       const Icon(Icons.broken_image, size: 50, color: Colors.grey),
                                                 ),
@@ -417,10 +413,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                           ),
-                                          // --- ADDED RATING ROW HERE ---
                                           const SizedBox(height: 4),
                                           _buildRatingRow(productData),
-                                          
                                           const SizedBox(height: 4),
                                           Text(
                                             "₹${productData['Price']}",

@@ -1,7 +1,5 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:ecommerce_shop/pages/bottomnav.dart';
 import 'package:ecommerce_shop/pages/signup.dart';
-import 'package:ecommerce_shop/services/shared_preferences.dart';
+import 'package:ecommerce_shop/services/shimmer/signup_shimmer.dart';
 import 'package:ecommerce_shop/utils/authmethods.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -15,12 +13,14 @@ class LoginPageAfterSignup extends StatefulWidget {
 }
 
 class _LoginPageAfterSignupState extends State<LoginPageAfterSignup> {
+  // 1. Add Form Key
+  final _formKey = GlobalKey<FormState>();
+  
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  
   bool _isLoading = false;
   bool _isPasswordVisible = false;
-  
-  //State to control the visibility of the "Resend Email" button
   bool _showResendButton = false;
 
   @override
@@ -30,7 +30,6 @@ class _LoginPageAfterSignupState extends State<LoginPageAfterSignup> {
     super.dispose();
   }
 
-  /// Shows a SnackBar with a given message and color.
   void _showSnackBar(String message, {bool isError = false, Color? backgroundColor}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
@@ -43,17 +42,12 @@ class _LoginPageAfterSignupState extends State<LoginPageAfterSignup> {
       ));
   }
 
-  /// ⭐️ NEW: Function to resend the verification email.
   Future<void> _resendVerificationEmail() async {
-    // Ensure fields are not empty before proceeding
-    if (_emailController.text.trim().isEmpty || _passwordController.text.trim().isEmpty) {
-      _showSnackBar("Please enter your email and password to resend verification.", isError: true);
-      return;
-    }
+    // Validate inputs first
+    if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
     try {
-      // Temporarily sign in the user to get a user object
       final cred = await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
@@ -61,25 +55,28 @@ class _LoginPageAfterSignupState extends State<LoginPageAfterSignup> {
 
       if (cred.user != null && !cred.user!.emailVerified) {
         await cred.user!.sendEmailVerification();
-        _showSnackBar("A new verification email has been sent. Please check your inbox.");
+        _showSnackBar("Verification email sent! Please check your inbox.");
+      } else {
+        _showSnackBar("This email is already verified.");
       }
-      // Sign out immediately after sending the email
+      // Sign out so they have to log in again properly
       await FirebaseAuth.instance.signOut();
     } on FirebaseAuthException catch (e) {
       _showSnackBar("Error: ${e.message}", isError: true);
     } catch (e) {
       _showSnackBar("An unexpected error occurred.", isError: true);
     } finally {
-      if(mounted) {
-        setState(() => _isLoading = false);
-      }
+      if(mounted) setState(() => _isLoading = false);
     }
   }
 
   Future<void> _handleLogin() async {
+    // 1. Validate Form
+    if (!_formKey.currentState!.validate()) return;
+
     setState(() {
       _isLoading = true;
-      _showResendButton = false; // Reset on each login attempt
+      _showResendButton = false;
     });
 
     try {
@@ -88,45 +85,21 @@ class _LoginPageAfterSignupState extends State<LoginPageAfterSignup> {
         password: _passwordController.text.trim(),
       );
 
-      // Handle different responses from AuthMethods
+      if (!mounted) return;
+
       if (res == "Login successful.") {
-        _showSnackBar(res);
-
-        final uid = FirebaseAuth.instance.currentUser!.uid;
-        final userSnap = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-
-        if (!userSnap.exists) {
-          throw Exception("User profile not found in the database.");
-        }
-
-        final userData = userSnap.data()!;
-        final prefs = SharedPreferenceHelper();
-        await prefs.saveUserEmail(userData['Email']);
-        await prefs.saveUserName(userData['Name']);
-        await prefs.saveUserId(uid);
-        await prefs.saveUserImage(userData['Image']);
-
-        if (mounted) {
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (context) => const BottomBar()),
-            (route) => false,
-          );
-        }
+        // 2. SUCCESS: Pop to root. RootWrapper takes over from here.
+        Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
       } else {
         _showSnackBar(res, isError: true);
-        // ⭐️ NEW: If the error is about verification, show the resend button
         if (res.contains("Please verify your email")) {
-          setState(() {
-            _showResendButton = true;
-          });
+          setState(() => _showResendButton = true);
         }
       }
     } catch (e) {
-      _showSnackBar("Login failed: ${e.toString()}", isError: true);
+      if (mounted) _showSnackBar("Login failed: ${e.toString()}", isError: true);
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -137,7 +110,10 @@ class _LoginPageAfterSignupState extends State<LoginPageAfterSignup> {
     final textTheme = theme.textTheme;
 
     return Scaffold(
+      // Ensure the Scaffold resizes when keyboard opens to prevent bottom overflow
+      resizeToAvoidBottomInset: true, 
       body: Container(
+        height: double.infinity,
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
@@ -150,116 +126,153 @@ class _LoginPageAfterSignupState extends State<LoginPageAfterSignup> {
           ),
         ),
         child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Lottie.asset(
-                    'images/login.json', // Consider a different animation for verification
-                    height: 220,
-                    fit: BoxFit.contain,
-                  ),
-                  const SizedBox(height: 24),
+          // 3. Overflow Fix: Use LayoutBuilder to handle scrolling + centering
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                      // 4. Wrap in Form
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Lottie.asset(
+                              'images/login.json',
+                              height: 220,
+                              fit: BoxFit.contain,
+                              errorBuilder: (c, e, s) => const Icon(Icons.mark_email_read, size: 80),
+                            ),
+                            const SizedBox(height: 24),
 
-                  Text(
-                    "Verify Your Email",
-                    textAlign: TextAlign.center,
-                    style: textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: colorScheme.primary,
+                            Text(
+                              "Verify Your Email",
+                              textAlign: TextAlign.center,
+                              style: textTheme.headlineMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.primary,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              "Link sent! Please verify and login.",
+                              textAlign: TextAlign.center,
+                              style: textTheme.titleMedium?.copyWith(color: Colors.grey[600]),
+                            ),
+                            const SizedBox(height: 32),
+
+                            // Inputs
+                            _buildTextFormField(
+                              controller: _emailController,
+                              hintText: "Email Address",
+                              icon: Icons.email_outlined,
+                              keyboardType: TextInputType.emailAddress,
+                              validator: (val) {
+                                if (val == null || val.isEmpty) return "Enter your email";
+                                if (!RegExp(r'\S+@\S+\.\S+').hasMatch(val)) return "Invalid email";
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 20),
+
+                            _buildPasswordField(),
+                            const SizedBox(height: 32),
+
+                            _buildLoginButton(),
+                            const SizedBox(height: 16),
+
+                            if (_showResendButton) _buildResendButton(),
+
+                            const SizedBox(height: 24),
+                            _buildSignupLink(),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    "A verification link was sent to your email. Please check your inbox and login.",
-                    textAlign: TextAlign.center,
-                    style: textTheme.titleMedium?.copyWith(
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-
-                  _buildTextField(
-                    controller: _emailController,
-                    hintText: "Email Address",
-                    icon: Icons.email_outlined,
-                    keyboardType: TextInputType.emailAddress,
-                  ),
-                  const SizedBox(height: 20),
-
-                  _buildPasswordField(),
-                  const SizedBox(height: 32),
-
-                  _buildLoginButton(),
-                  const SizedBox(height: 16),
-
-                  if (_showResendButton) _buildResendButton(),
-
-                  const SizedBox(height: 24),
-                  _buildSignupLink(),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           ),
         ),
       ),
     );
   }
 
-  Widget _buildTextField({
+  // --- WIDGETS ---
+
+  Widget _buildTextFormField({
     required TextEditingController controller,
     required String hintText,
     required IconData icon,
     TextInputType keyboardType = TextInputType.text,
+    String? Function(String?)? validator,
   }) {
-    return TextField(
+    return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
+      validator: validator,
       decoration: InputDecoration(
         hintText: hintText,
         prefixIcon: Icon(icon, color: Colors.grey[500]),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
       ),
     );
   }
 
   Widget _buildPasswordField() {
-    return TextField(
+    return TextFormField(
       controller: _passwordController,
       obscureText: !_isPasswordVisible,
+      validator: (val) => val!.isEmpty ? "Enter your password" : null,
       decoration: InputDecoration(
         hintText: "Password",
         prefixIcon: Icon(Icons.lock_outline, color: Colors.grey[500]),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
         suffixIcon: IconButton(
           icon: Icon(
             _isPasswordVisible ? Icons.visibility_off : Icons.visibility,
             color: Colors.grey[500],
           ),
-          onPressed: () {
-            setState(() {
-              _isPasswordVisible = !_isPasswordVisible;
-            });
-          },
+          onPressed: () => setState(() => _isPasswordVisible = !_isPasswordVisible),
         ),
       ),
     );
   }
 
   Widget _buildLoginButton() {
-    return SizedBox(
-      height: 55,
-      child: ElevatedButton(
-        onPressed: _isLoading ? null : _handleLogin,
-        child: _isLoading
-            ? CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Theme.of(context).colorScheme.onPrimary),
-              )
-            : const Text("Login"),
-      ),
-    );
-  }
+  return SizedBox(
+    height: 55,
+    child: _isLoading
+        ? const SignupShimmerButton() // reuse same shimmer bar
+        : ElevatedButton(
+            onPressed: _handleLogin,
+            style: ElevatedButton.styleFrom(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: const Text(
+              "Login",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          ),
+  );
+}
+
   
   Widget _buildResendButton() {
     return Center(
@@ -277,27 +290,19 @@ class _LoginPageAfterSignupState extends State<LoginPageAfterSignup> {
   }
 
   Widget _buildSignupLink() {
-    final textTheme = Theme.of(context).textTheme;
-    final colorScheme = Theme.of(context).colorScheme;
-
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text(
-          "Want to use a different account?",
-          style: textTheme.bodyMedium?.copyWith(color: Colors.grey[700]),
-        ),
+        Text("Wrong email?", style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey[700])),
         TextButton(
           onPressed: () {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => const SignupPage()),
-            );
+            // PushReplacement is fine here to switch back to signup
+            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const SignupPage()));
           },
           child: Text(
-            "Sign Up",
-            style: textTheme.bodyMedium?.copyWith(
-              color: colorScheme.primary,
+            "Sign Up Again",
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Theme.of(context).colorScheme.primary,
               fontWeight: FontWeight.bold,
             ),
           ),

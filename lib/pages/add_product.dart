@@ -1,10 +1,37 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:ecommerce_shop/utils/database.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart'; // 1. NEW IMPORT
 import 'package:image_picker/image_picker.dart';
 import 'package:random_string/random_string.dart';
-// Removed file_picker import as we don't need it anymore
+import 'package:shimmer/shimmer.dart';
+
+//TODO: change categories as per your needs
+//TODO: ensure Firebase rules are set to allow uploads only by authenticated admins
+//TODO: seperate this logic to new app for admins only
+
+
+// --- MODEL VALIDATOR CLASS ---
+class ModelValidator {
+  static Future<bool> isDracoCompressed(File file) async {
+    try {
+      final filename = file.path.toLowerCase();
+      if (!filename.endsWith('.glb') && !filename.endsWith('.gltf')) {
+        return false;
+      }
+      final bytes = await file.openRead(0, 50 * 1024).first; 
+      final content = utf8.decode(bytes, allowMalformed: true);
+      const dracoKey = 'KHR_draco_mesh_compression';
+      return content.contains(dracoKey);
+    } catch (e) {
+      print("Error validating model: $e");
+      return false;
+    }
+  }
+}
 
 class AddProduct extends StatefulWidget {
   final String adminID;
@@ -17,18 +44,21 @@ class AddProduct extends StatefulWidget {
 class _AddProductState extends State<AddProduct> {
   final ImagePicker _picker = ImagePicker();
   
-  // List to hold multiple images
   List<File> selectedImages = [];
   
+  // 3D Model State
+  File? _selectedModelFile;
+  String? _modelFileName;
+  String? _modelFileSize;
+
   bool isLoading = false;
   String? selectedCategory;
+  bool _agreedToTerms = false;
 
   late TextEditingController _productNameController;
   late TextEditingController _productDescriptionController;
   late TextEditingController _productPriceController;
   late TextEditingController _productInventoryController;
-  // CHANGED: Added controller for URL
-  late TextEditingController _sketchfabUrlController;
 
   @override
   void initState() {
@@ -37,7 +67,6 @@ class _AddProductState extends State<AddProduct> {
     _productDescriptionController = TextEditingController();
     _productPriceController = TextEditingController();
     _productInventoryController = TextEditingController();
-    _sketchfabUrlController = TextEditingController();
   }
 
   @override
@@ -46,27 +75,96 @@ class _AddProductState extends State<AddProduct> {
     _productDescriptionController.dispose();
     _productPriceController.dispose();
     _productInventoryController.dispose();
-    _sketchfabUrlController.dispose();
     super.dispose();
   }
 
+  // --- 2. UPDATED IMAGE PICKER WITH COMPRESSION ---
   Future<void> _pickImages() async {
     try {
       final List<XFile> images = await _picker.pickMultiImage();
+      
       if (images.isNotEmpty) {
-        setState(() {
-          for (var i in images) {
-             if (selectedImages.length < 5) {
-               selectedImages.add(File(i.path));
-             } else {
-               _showSnackBar("Maximum 5 images allowed.", isError: true);
-               break;
-             }
+        List<File> processedImages = [];
+
+        for (var i in images) {
+          // Strict check: don't allow selecting more than 5 total
+          if ((selectedImages.length + processedImages.length) >= 5) {
+            _showSnackBar("Maximum 5 images allowed.", isError: true);
+            break;
           }
+
+          File originalFile = File(i.path);
+          int sizeInBytes = await originalFile.length();
+          double sizeInMB = sizeInBytes / (1024 * 1024);
+
+          // COMPRESSION LOGIC
+          // Only compress if image is larger than 1MB
+          if (sizeInMB > 1.0) {
+            final String targetPath = '${originalFile.parent.path}/${DateTime.now().millisecondsSinceEpoch}_compressed.jpg';
+            
+            var result = await FlutterImageCompress.compressAndGetFile(
+              originalFile.absolute.path,
+              targetPath,
+              quality: 70, // Good balance for e-commerce
+              minWidth: 1080, 
+              minHeight: 1080,
+            );
+
+            if (result != null) {
+              processedImages.add(File(result.path));
+            } else {
+              // Fallback to original if compression fails
+              processedImages.add(originalFile);
+            }
+          } else {
+            // File is small enough, use original
+            processedImages.add(originalFile);
+          }
+        }
+
+        // Update UI
+        setState(() {
+          selectedImages.addAll(processedImages);
         });
       }
     } catch (e) {
       _showSnackBar("Image selection failed: $e", isError: true);
+    }
+  }
+
+  Future<void> _pick3DModel() async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['glb', 'gltf'],
+      );
+
+      if (result != null) {
+        File file = File(result.files.single.path!);
+        int sizeInBytes = await file.length();
+        double sizeInMB = sizeInBytes / (1024 * 1024);
+
+        if (sizeInMB > 5.0) {
+          _showSnackBar("File too large (${sizeInMB.toStringAsFixed(1)} MB). Limit is 5MB.", isError: true);
+          return; 
+        }
+
+        bool isDraco = await ModelValidator.isDracoCompressed(file);
+        if (!isDraco) {
+           _showSnackBar("Invalid Model: File must be Draco compressed.", isError: true);
+           return;
+        }
+
+        setState(() {
+          _selectedModelFile = file;
+          _modelFileName = result.files.single.name;
+          _modelFileSize = "${sizeInMB.toStringAsFixed(2)} MB";
+        });
+        
+        _showSnackBar("Model selected successfully!");
+      }
+    } catch (e) {
+      _showSnackBar("Model selection failed: $e", isError: true);
     }
   }
 
@@ -91,32 +189,42 @@ class _AddProductState extends State<AddProduct> {
       return;
     }
 
+    if (!_agreedToTerms) {
+      _showSnackBar('You must agree to the terms.', isError: true);
+      return;
+    }
+
     final int? inventory = int.tryParse(_productInventoryController.text.trim());
     if (inventory == null || inventory < 10) {
       _showSnackBar('Product inventory must be 10 or more.', isError: true);
       return;
     }
 
-    setState(() => isLoading = true);
+    setState(() => isLoading = true); 
 
     try {
       final String productId = randomAlphaNumeric(10);
       List<String> imageUrls = [];
+      String? modelUrl;
 
-      // 1. Upload Images Loop
+      final storageRef = FirebaseStorage.instance.ref();
+
+      // Upload Images
       for (int i = 0; i < selectedImages.length; i++) {
-         final imageRef = FirebaseStorage.instance
-             .ref()
-             .child('products/$productId/image_$i.jpg');
-         final uploadTask = await imageRef.putFile(selectedImages[i]);
-         final url = await uploadTask.ref.getDownloadURL();
+         final imageRef = storageRef.child('products/$productId/image_$i.jpg');
+         await imageRef.putFile(selectedImages[i]);
+         final url = await imageRef.getDownloadURL();
          imageUrls.add(url);
       }
 
-      // 2. Prepare Data Map
-      // We no longer upload a 3D file, we just take the text string
-      String sketchfabUrl = _sketchfabUrlController.text.trim();
+      // Upload 3D Model
+      if (_selectedModelFile != null) {
+        final modelRef = storageRef.child('products/$productId/model.glb');
+        await modelRef.putFile(_selectedModelFile!);
+        modelUrl = await modelRef.getDownloadURL();
+      }
 
+      // Firestore Write
       final Map<String, dynamic> productData = {
         "id": productId,
         "Name": _productNameController.text.trim(),
@@ -126,8 +234,10 @@ class _AddProductState extends State<AddProduct> {
         "Price": int.tryParse(_productPriceController.text.trim()) ?? 0,
         "adminId": widget.adminID,
         "inventory": inventory,
-        // Save the URL if the user typed one
-        if (sketchfabUrl.isNotEmpty) "sketchfabUrl": sketchfabUrl,
+        "category": selectedCategory,
+        if (modelUrl != null) "modelUrl": modelUrl, 
+        "averageRating": 0.0,
+        "reviewCount": 0,
       };
 
       await DatabaseMethods().addProduct(productData, selectedCategory!, widget.adminID);
@@ -146,6 +256,22 @@ class _AddProductState extends State<AddProduct> {
     }
   }
 
+  // --- Helper to build Shimmer Overlay ---
+  Widget _buildLoadingOverlay(Widget child) {
+    if (!isLoading) return child;
+    return Shimmer.fromColors(
+      baseColor: Colors.grey[300]!,
+      highlightColor: Colors.grey[100]!,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: child,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
@@ -157,10 +283,7 @@ class _AddProductState extends State<AddProduct> {
           icon: Icon(Icons.arrow_back, color: colorScheme.primary),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text(
-          "Add Product",
-          style: textTheme.titleLarge?.copyWith(color: colorScheme.primary, fontWeight: FontWeight.bold),
-        ),
+        title: Text("Add Product", style: textTheme.titleLarge?.copyWith(color: colorScheme.primary, fontWeight: FontWeight.bold)),
       ),
       body: SingleChildScrollView(
         child: Padding(
@@ -171,13 +294,13 @@ class _AddProductState extends State<AddProduct> {
               Text("Upload Product Images (Max 5)", style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
               
-              // Horizontal Image List
+              // --- IMAGES SECTION WITH SHIMMER ---
               SizedBox(
                 height: 120,
                 child: ListView(
                   scrollDirection: Axis.horizontal,
                   children: [
-                    if (selectedImages.length < 5)
+                    if (selectedImages.length < 5 && !isLoading)
                       GestureDetector(
                         onTap: _pickImages,
                         child: Container(
@@ -198,11 +321,11 @@ class _AddProductState extends State<AddProduct> {
                           ),
                         ),
                       ),
-
                     ...selectedImages.asMap().entries.map((entry) {
                       int idx = entry.key;
                       File file = entry.value;
-                      return Stack(
+                      
+                      Widget imageContent = Stack(
                         children: [
                           Container(
                             width: 120,
@@ -216,54 +339,94 @@ class _AddProductState extends State<AddProduct> {
                               child: Image.file(file, fit: BoxFit.cover),
                             ),
                           ),
-                          Positioned(
-                            top: 5,
-                            right: 15,
-                            child: GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  selectedImages.removeAt(idx);
-                                });
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: const BoxDecoration(
-                                  color: Colors.red,
-                                  shape: BoxShape.circle,
+                          if (!isLoading)
+                            Positioned(
+                              top: 5, right: 15,
+                              child: GestureDetector(
+                                onTap: () => setState(() => selectedImages.removeAt(idx)),
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                                  child: const Icon(Icons.close, color: Colors.white, size: 16),
                                 ),
-                                child: const Icon(Icons.close, color: Colors.white, size: 16),
                               ),
                             ),
-                          ),
                         ],
                       );
-                    }).toList(),
+
+                      return isLoading ? _buildLoadingOverlay(Container(width: 120, height: 120, margin: const EdgeInsets.only(right: 10))) : imageContent;
+                    }),
                   ],
                 ),
               ),
               const SizedBox(height: 30),
 
-              // CHANGED: Replaced Custom File Picker with Simple TextField
-              Text("Sketchfab URL (Optional)", style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+              // --- 3D MODEL PICKER WITH SHIMMER ---
+              Text("Upload 3D Model (Optional, < 5MB)", style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
-              TextField(
-                controller: _sketchfabUrlController, 
-                decoration: const InputDecoration(
-                  hintText: 'Paste 3D Model URL here',
-                  prefixIcon: Icon(Icons.link)
+              
+              isLoading 
+              ? _buildLoadingOverlay(SizedBox(height: 70, width: double.infinity))
+              : Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade400),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.view_in_ar, color: colorScheme.primary),
+                    const SizedBox(width: 15),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _modelFileName ?? "No model selected (.glb)",
+                            style: TextStyle(
+                              color: _modelFileName != null ? Colors.black : Colors.grey,
+                              fontWeight: _modelFileName != null ? FontWeight.bold : FontWeight.normal
+                            ),
+                            maxLines: 1, overflow: TextOverflow.ellipsis,
+                          ),
+                          if (_modelFileSize != null)
+                            Text(_modelFileSize!, style: TextStyle(color: colorScheme.primary, fontSize: 12, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                    if (_selectedModelFile != null)
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.red),
+                        onPressed: () => setState(() {
+                          _selectedModelFile = null;
+                          _modelFileName = null;
+                          _modelFileSize = null;
+                        }),
+                      )
+                    else
+                      ElevatedButton(
+                        onPressed: _pick3DModel,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey[200],
+                          foregroundColor: Colors.black,
+                          elevation: 0,
+                        ),
+                        child: const Text("Pick File"),
+                      ),
+                  ],
                 ),
               ),
-              // ---------------------------------------------------------
-
+              
               const SizedBox(height: 30),
               Text("Product Name", style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
-              TextField(controller: _productNameController, decoration: const InputDecoration(hintText: 'Product Name')),
+              TextField(controller: _productNameController, enabled: !isLoading, decoration: const InputDecoration(hintText: 'Product Name')),
 
               const SizedBox(height: 20),
               Text("Product Description", style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
-              TextField(controller: _productDescriptionController, maxLines: 4, decoration: const InputDecoration(hintText: 'Product Description')),
+              TextField(controller: _productDescriptionController, enabled: !isLoading, maxLines: 4, decoration: const InputDecoration(hintText: 'Product Description')),
 
               const SizedBox(height: 20),
               Text("Product Inventory", style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
@@ -271,13 +434,14 @@ class _AddProductState extends State<AddProduct> {
               TextField(
                 controller: _productInventoryController,
                 keyboardType: TextInputType.number,
+                enabled: !isLoading,
                 decoration: const InputDecoration(hintText: 'Product Inventory'),
               ),
 
               const SizedBox(height: 20),
               Text("Product Price (INR)", style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
-              TextField(controller: _productPriceController, keyboardType: TextInputType.number, decoration: const InputDecoration(hintText: 'Price', prefixIcon: Icon(Icons.currency_rupee))),
+              TextField(controller: _productPriceController, enabled: !isLoading, keyboardType: TextInputType.number, decoration: const InputDecoration(hintText: 'Price', prefixIcon: Icon(Icons.currency_rupee))),
 
               const SizedBox(height: 20),
               Text("Product Category", style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
@@ -301,9 +465,19 @@ class _AddProductState extends State<AddProduct> {
                               child: Text(category),
                             ))
                         .toList(),
-                    onChanged: (String? newValue) => setState(() => selectedCategory = newValue),
+                    onChanged: isLoading ? null : (String? newValue) => setState(() => selectedCategory = newValue),
                   ),
                 ),
+              ),
+              
+              const SizedBox(height: 20),
+              CheckboxListTile(
+                title: const Text("I certify that I have the right to sell this product."),
+                value: _agreedToTerms,
+                onChanged: isLoading ? null : (val) => setState(() => _agreedToTerms = val ?? false),
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero,
+                activeColor: colorScheme.primary,
               ),
             ],
           ),
@@ -318,7 +492,7 @@ class _AddProductState extends State<AddProduct> {
             onPressed: isLoading ? null : _uploadItem,
             icon: isLoading ? Container() : const Icon(Icons.add),
             label: isLoading
-                ? const CircularProgressIndicator()
+                ? const Text("Uploading...") 
                 : const Text("Add Product"),
           ),
         ),

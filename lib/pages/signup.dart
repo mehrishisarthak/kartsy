@@ -1,13 +1,8 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:ecommerce_shop/pages/bottomnav.dart';
 import 'package:ecommerce_shop/pages/login.dart';
-import 'package:ecommerce_shop/pages/login_after_signup.dart';
-import 'package:ecommerce_shop/services/shared_preferences.dart';
+import 'package:ecommerce_shop/services/shimmer/signup_shimmer.dart';
 import 'package:ecommerce_shop/utils/authmethods.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
-import 'package:random_string/random_string.dart';
 
 class SignupPage extends StatefulWidget {
   const SignupPage({super.key});
@@ -17,12 +12,14 @@ class SignupPage extends StatefulWidget {
 }
 
 class _SignupPageState extends State<SignupPage> {
+  // 1. Add Form Key for validation
+  final _formKey = GlobalKey<FormState>();
+  
   late TextEditingController _nameController;
   late TextEditingController _emailController;
   late TextEditingController _passwordController;
 
   bool _isLoading = false;
-  // State variable to toggle password visibility
   bool _isPasswordVisible = false;
 
   @override
@@ -31,10 +28,6 @@ class _SignupPageState extends State<SignupPage> {
     _nameController = TextEditingController();
     _emailController = TextEditingController();
     _passwordController = TextEditingController();
-    _isPasswordVisible = false; // Initially, password is not visible
-    // Clear any previous user info from shared preferences
-    // This is important to ensure a fresh start for the signup process.
-    SharedPreferenceHelper().clearUserInfo();
   }
 
   @override
@@ -45,7 +38,6 @@ class _SignupPageState extends State<SignupPage> {
     super.dispose();
   }
 
-  /// Shows a SnackBar with a given message and color.
   void _showSnackBar(String message, {bool isError = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
@@ -54,92 +46,58 @@ class _SignupPageState extends State<SignupPage> {
         content: Text(message),
         backgroundColor: isError ? Theme.of(context).colorScheme.error : Colors.green,
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 3),
       ));
   }
 
-
-  /// Handles the user signup process.
+  // --- ROBUST SIGNUP LOGIC ---
   Future<void> _handleSignup() async {
-    // Basic validation on the client side
-    if (_nameController.text.trim().isEmpty ||
-        _emailController.text.trim().isEmpty ||
-        _passwordController.text.trim().isEmpty) {
-      _showSnackBar("Please fill in all the fields.", isError: true);
-      return;
-    }
+    // 1. Validate inputs BEFORE hitting the server
+    if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
-    // This is a placeholder image URL.
-    String image =
-        "https://firebasestorage.googleapis.com/v0/b/kartsyapp-87532.firebasestorage.app/o/default_profile.png?alt=media&token=d328f93c-400f-4deb-a0e8-014eb2e2b795";
 
+    // Note: We use an empty string or null for image. 
+    // The UI should handle displaying a default asset if this is empty.
     String res = await AuthMethods().signUpUser(
       email: _emailController.text.trim(),
       password: _passwordController.text.trim(),
       username: _nameController.text.trim(),
-      image: image,
+      image: "", // Don't rely on hardcoded URLs
     );
 
+    if (!mounted) return;
     setState(() => _isLoading = false);
 
-    final bool isSuccess = res.startsWith("Account created successfully");
-    _showSnackBar(res, isError: !isSuccess);
+    // 2. Check for the specific success message from your AuthMethods
+    if (res.startsWith("Account created successfully")) {
+      // SUCCESS: Clear the stack so RootWrapper can show the Home Screen
+      Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
 
-    if (isSuccess) {
-      // Navigate to the verification page after successful email signup
-      if (mounted) {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (context) => const LoginPageAfterSignup()),
-          (Route<dynamic> route) => false,
-        );
-      }
+    } else {
+      _showSnackBar(res, isError: true);
     }
   }
 
-  /// Handles the Google signup process.
   Future<void> _handleGoogleSignup() async {
     setState(() => _isLoading = true);
 
     try {
       String res = await AuthMethods().signInWithGoogle();
       
-      final bool isSuccess = res == "Login successful.";
+      if (!mounted) return;
 
-      _showSnackBar(res, isError: !isSuccess);
-
-      if (isSuccess) {
-        // If Google sign-in is successful, fetch user data and navigate to home
-        final uid = FirebaseAuth.instance.currentUser!.uid;
-        final userSnap = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-
-        if (!userSnap.exists) {
-          throw Exception("User profile not found in the database after Google Sign-In.");
-        }
-
-        final userData = userSnap.data()!;
-        final prefs = SharedPreferenceHelper();
-        await prefs.saveUserEmail(userData['Email']);
-        await prefs.saveUserName(userData['Name']);
-        await prefs.saveUserId(uid);
-        await prefs.saveUserImage(userData['Image']);
-
-        if (mounted) {
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (context) => const BottomBar()),
-                (route) => false,
-          );
-        }
+      if (res == "Login successful.") {
+         // SUCCESS: Clear stack -> RootWrapper detects user -> Shows Home
+         Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+      } else {
+        _showSnackBar(res, isError: true);
       }
     } catch (e) {
-      _showSnackBar("An unexpected error occurred during Google Sign-In.", isError: true);
+      _showSnackBar("Google Sign-In failed", isError: true);
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -148,14 +106,13 @@ class _SignupPageState extends State<SignupPage> {
     final textTheme = theme.textTheme;
 
     return Scaffold(
-      // Use a container with a gradient for a more modern background
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              colorScheme.primary.withAlpha(26), // 0.1 opacity
+              colorScheme.primary.withAlpha(26),
               colorScheme.surface,
               colorScheme.surface,
             ],
@@ -165,73 +122,75 @@ class _SignupPageState extends State<SignupPage> {
           child: Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Lottie animation for visual appeal
-                  Lottie.asset(
-                    'images/login.json', // Ensure this path is correct in your assets
-                    height: 200, // Adjusted height
-                    fit: BoxFit.contain,
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Header Text
-                  Text(
-                    "Create Your Account",
-                    textAlign: TextAlign.center,
-                    style: textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: colorScheme.primary,
+              // 3. Wrap everything in a Form
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Lottie.asset(
+                      'images/login.json', 
+                      height: 200,
+                      fit: BoxFit.contain,
+                      errorBuilder: (c, e, s) => const Icon(Icons.person_add, size: 80),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    "Let's get started!",
-                    textAlign: TextAlign.center,
-                    style: textTheme.titleMedium?.copyWith(
-                      color: Colors.grey[600],
+                    const SizedBox(height: 24),
+
+                    Text(
+                      "Create Your Account",
+                      textAlign: TextAlign.center,
+                      style: textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.primary,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 32),
+                    const SizedBox(height: 8),
+                    Text(
+                      "Let's get started!",
+                      textAlign: TextAlign.center,
+                      style: textTheme.titleMedium?.copyWith(color: Colors.grey[600]),
+                    ),
+                    const SizedBox(height: 32),
 
-                  // Name TextField
-                  _buildTextField(
-                    controller: _nameController,
-                    hintText: "Full Name",
-                    icon: Icons.person_outline,
-                  ),
-                  const SizedBox(height: 20),
+                    // Inputs using TextFormField
+                    _buildTextFormField(
+                      controller: _nameController,
+                      hintText: "Full Name",
+                      icon: Icons.person_outline,
+                      validator: (val) => val!.isEmpty ? "Enter your name" : null,
+                    ),
+                    const SizedBox(height: 20),
 
-                  // Email TextField
-                  _buildTextField(
-                    controller: _emailController,
-                    hintText: "Email Address",
-                    icon: Icons.email_outlined,
-                    keyboardType: TextInputType.emailAddress,
-                  ),
-                  const SizedBox(height: 20),
+                    _buildTextFormField(
+                      controller: _emailController,
+                      hintText: "Email Address",
+                      icon: Icons.email_outlined,
+                      keyboardType: TextInputType.emailAddress,
+                      validator: (val) {
+                         if (val == null || val.isEmpty) return "Enter your email";
+                         // Basic Email Regex
+                         if (!RegExp(r'\S+@\S+\.\S+').hasMatch(val)) return "Invalid email address";
+                         return null;
+                      },
+                    ),
+                    const SizedBox(height: 20),
 
-                  // Password TextField
-                  _buildPasswordField(),
-                  const SizedBox(height: 32),
+                    _buildPasswordField(),
+                    const SizedBox(height: 32),
 
-                  // Signup Button
-                  _buildSignupButton(),
-                  const SizedBox(height: 20),
+                    _buildSignupButton(),
+                    const SizedBox(height: 20),
 
-                  // OR Divider
-                  _buildDivider(),
-                  const SizedBox(height: 20),
+                    _buildDivider(),
+                    const SizedBox(height: 20),
 
-                  // Google Signup Button
-                  _buildGoogleSignupButton(),
-                  const SizedBox(height: 24),
+                    _buildGoogleSignupButton(),
+                    const SizedBox(height: 24),
 
-                  // Login Link
-                  _buildLoginLink(),
-                ],
+                    _buildLoginLink(),
+                  ],
+                ),
               ),
             ),
           ),
@@ -240,135 +199,124 @@ class _SignupPageState extends State<SignupPage> {
     );
   }
 
-  /// A helper widget to build consistently styled text fields.
-  Widget _buildTextField({
+  // --- UPDATED WIDGETS ---
+
+  Widget _buildTextFormField({
     required TextEditingController controller,
     required String hintText,
     required IconData icon,
     TextInputType keyboardType = TextInputType.text,
+    String? Function(String?)? validator,
   }) {
-    return TextField(
+    return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
+      validator: validator, // Connects to the Form Key
       decoration: InputDecoration(
         hintText: hintText,
         prefixIcon: Icon(icon, color: Colors.grey[500]),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        // Remove standard borders if you use a theme, but this is safe default
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
       ),
     );
   }
 
-  /// A specific widget for the password field with a visibility toggle.
   Widget _buildPasswordField() {
-    return TextField(
+    return TextFormField(
       controller: _passwordController,
       obscureText: !_isPasswordVisible,
+      validator: (val) {
+        if (val == null || val.isEmpty) return "Enter a password";
+        if (val.length < 6) return "Password must be at least 6 chars";
+        return null;
+      },
       decoration: InputDecoration(
         hintText: "Password",
         prefixIcon: Icon(Icons.lock_outline, color: Colors.grey[500]),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
         suffixIcon: IconButton(
           icon: Icon(
             _isPasswordVisible ? Icons.visibility_off : Icons.visibility,
             color: Colors.grey[500],
           ),
-          onPressed: () {
-            setState(() {
-              _isPasswordVisible = !_isPasswordVisible;
-            });
-          },
+          onPressed: () => setState(() => _isPasswordVisible = !_isPasswordVisible),
         ),
       ),
     );
   }
-  
-  /// A helper widget for the main signup button.
-  Widget _buildSignupButton() {
-    return SizedBox(
-      height: 55,
-      child: ElevatedButton(
-        onPressed: _isLoading ? null : _handleSignup,
-        child: _isLoading
-            ? CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Theme.of(context).colorScheme.onPrimary),
-              )
-            : const Text("Sign Up"),
-      ),
-    );
-  }
 
-  /// A helper widget for the "OR" divider.
+  Widget _buildSignupButton() {
+  return SizedBox(
+    height: 55,
+    child: _isLoading
+        ? const SignupShimmerButton()
+        : ElevatedButton(
+            onPressed: _handleSignup,
+            style: ElevatedButton.styleFrom(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: const Text(
+              "Sign Up",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          ),
+  );
+}
+
+
   Widget _buildDivider() {
     return Row(
       children: [
         Expanded(child: Divider(color: Colors.grey[400])),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12.0),
-          child: Text(
-            "OR",
-            style: TextStyle(
-              color: Colors.grey[600],
-              fontWeight: FontWeight.w500,
-            ),
-          ),
+          child: Text("OR", style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.w500)),
         ),
         Expanded(child: Divider(color: Colors.grey[400])),
       ],
     );
   }
 
-  /// A helper widget for the Google signup button.
   Widget _buildGoogleSignupButton() {
     final theme = Theme.of(context);
     return SizedBox(
       height: 55,
       child: OutlinedButton.icon(
         onPressed: _isLoading ? null : _handleGoogleSignup,
-        icon: Image.asset(
-          'images/icons/google.png', // Ensure this path is correct
-          height: 24.0,
-        ),
-        label: Text(
-          "Sign up with Google",
-          style: theme.textTheme.labelLarge?.copyWith(
-            color: theme.colorScheme.onSurface.withAlpha(((0.8) * 255).toInt()), // Adjusted for better visibility
-          ),
-        ),
+        // Make sure to add error builder here too just in case asset is missing
+        icon: Image.asset('images/icons/google.png', height: 24.0, errorBuilder: (c,e,s) => const Icon(Icons.login)),
+        label: Text("Sign up with Google", style: theme.textTheme.labelLarge),
         style: OutlinedButton.styleFrom(
-          backgroundColor: theme.colorScheme.surface,
           side: BorderSide(color: Colors.grey.shade300),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       ),
     );
   }
 
-  /// A helper widget for the link to the login page.
   Widget _buildLoginLink() {
     final textTheme = Theme.of(context).textTheme;
     final colorScheme = Theme.of(context).colorScheme;
-
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text(
-          "Already have an account?",
-          style: textTheme.bodyMedium?.copyWith(color: Colors.grey[700]),
-        ),
+        Text("Already have an account?", style: textTheme.bodyMedium?.copyWith(color: Colors.grey[700])),
         TextButton(
           onPressed: () {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => const LoginPage()),
-            );
+            // Use PushReplacement so they can't "Back" into signup
+            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const LoginPage()));
           },
-          child: Text(
-            "Login",
-            style: textTheme.bodyMedium?.copyWith(
-              color: colorScheme.primary,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+          child: Text("Login", style: textTheme.bodyMedium?.copyWith(color: colorScheme.primary, fontWeight: FontWeight.bold)),
         )
       ],
     );

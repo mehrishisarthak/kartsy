@@ -2,16 +2,17 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ecommerce_shop/pages/order_screen.dart';
 import 'package:ecommerce_shop/pages/profile.dart';
 import 'package:ecommerce_shop/services/cart_provider.dart';
-import 'package:ecommerce_shop/services/shared_preferences.dart';
 import 'package:ecommerce_shop/utils/database.dart';
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 import 'package:provider/provider.dart';
 
 class CartPage extends StatefulWidget {
-  const CartPage({super.key, required this.userId});
+  // BottomBar guarantees this is called only when logged in,
+  // so userId is non-nullable.
+  final String userId;
 
-  final String? userId;
+  const CartPage({super.key, required this.userId});
 
   @override
   State<CartPage> createState() => _CartPageState();
@@ -24,6 +25,7 @@ class _CartPageState extends State<CartPage> {
   @override
   void initState() {
     super.initState();
+    // Using widget.userId directly (non-null)
     userID = widget.userId;
   }
 
@@ -31,16 +33,19 @@ class _CartPageState extends State<CartPage> {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(
-        content: Text(message),
-        backgroundColor: isError ? Theme.of(context).colorScheme.error : Colors.green,
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.all(20),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ));
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor:
+              isError ? Theme.of(context).colorScheme.error : Colors.green,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(20),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
   }
 
-  /// Wrapper to prevent rapid-fire clicks on any cart action.
   Future<void> _handleCartInteraction(Future<void> Function() action) async {
     if (_isBusy) return;
     if (mounted) setState(() => _isBusy = true);
@@ -53,34 +58,39 @@ class _CartPageState extends State<CartPage> {
     }
   }
 
-  /// Handles quantity updates with a Firestore Transaction and inventory check.
   Future<void> updateItemQuantity(String itemId, int delta) async {
     if (userID == null) return;
-    
-    final cartProvider = Provider.of<CartProvider>(context, listen: false);
-    final itemInCart = cartProvider.cart.firstWhere((item) => item['id'] == itemId, orElse: () => {});
 
-    // Check if the item exists in the cart and has an inventory value
+    final cartProvider = Provider.of<CartProvider>(context, listen: false);
+    final itemInCart = cartProvider.cart
+        .firstWhere((item) => item['id'] == itemId, orElse: () => {});
+
     final int currentLocalQuantity = itemInCart['quantity'] as int? ?? 0;
     final int? productInventory = itemInCart['inventory'] as int?;
 
-    // If increasing quantity, check if there's enough stock
-    if (delta > 0 && (productInventory != null && currentLocalQuantity >= productInventory)) {
+    // Local inventory limit check
+    if (delta > 0 &&
+        (productInventory != null &&
+            currentLocalQuantity >= productInventory)) {
       _showSnackBar('Maximum stock reached for this item.', isError: true);
       return;
     }
-    
-    final docRef = FirebaseFirestore.instance.collection('users').doc(userID).collection('cart').doc(itemId);
+
+    final docRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(userID)
+        .collection('cart')
+        .doc(itemId);
 
     try {
+      // Atomic quantity update in Firestore transaction. [web:22][web:27]
       await FirebaseFirestore.instance.runTransaction((transaction) async {
         final docSnapshot = await transaction.get(docRef);
 
-        if (!docSnapshot.exists) {
-          return;
-        }
+        if (!docSnapshot.exists) return;
 
-        final currentQuantity = (docSnapshot.data()?['quantity'] as int?) ?? 0;
+        final currentQuantity =
+            (docSnapshot.data()?['quantity'] as int?) ?? 0;
         final newQuantity = currentQuantity + delta;
 
         if (newQuantity > 0) {
@@ -98,31 +108,44 @@ class _CartPageState extends State<CartPage> {
         }
       }
     } catch (e) {
-      if (mounted) _showSnackBar('Could not update item.', isError: true);
-    }
-  }
-
-  /// Handles removing an item completely from the cart.
-  Future<void> removeItem(String itemId) async {
-    if (userID == null) return;
-    
-    final cartProvider = Provider.of<CartProvider>(context, listen: false);
-    final originalItem = Map<String, dynamic>.from(cartProvider.cart.firstWhere((i) => i['id'] == itemId));
-    final originalIndex = cartProvider.cart.indexWhere((i) => i['id'] == itemId);
-
-    cartProvider.removeFromCart(itemId);
-
-    try {
-      await FirebaseFirestore.instance.collection('users').doc(userID).collection('cart').doc(itemId).delete();
-    } catch (e) {
       if (mounted) {
-        cartProvider.addItemAt(originalIndex, originalItem);
-        _showSnackBar('Could not remove item. Please try again.', isError: true);
+        _showSnackBar('Could not update item.', isError: true);
       }
     }
   }
 
-  /// Handles placing the final order after validating the user's address.
+  Future<void> removeItem(String itemId) async {
+    if (userID == null) return;
+
+    final cartProvider = Provider.of<CartProvider>(context, listen: false);
+    final originalItem =
+        Map<String, dynamic>.from(cartProvider.cart.firstWhere(
+      (i) => i['id'] == itemId,
+    ));
+    final originalIndex =
+        cartProvider.cart.indexWhere((i) => i['id'] == itemId);
+
+    // Optimistic UI remove
+    cartProvider.removeFromCart(itemId);
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userID)
+          .collection('cart')
+          .doc(itemId)
+          .delete();
+    } catch (e) {
+      if (mounted) {
+        // Rollback on failure
+        cartProvider.addItemAt(originalIndex, originalItem);
+        _showSnackBar('Could not remove item. Please try again.',
+            isError: true);
+      }
+    }
+  }
+
+  // Address validation via Firestore user document. [web:24][web:31]
   Future<void> _handlePlaceOrder() async {
     if (userID == null) {
       _showSnackBar("Please log in to place an order.", isError: true);
@@ -135,22 +158,33 @@ class _CartPageState extends State<CartPage> {
       return;
     }
 
-    final prefs = SharedPreferenceHelper();
-    final address = await prefs.getUserAddress();
+    // 1. Get latest address from Firestore
+    final userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(userID)
+        .get();
+    final address = userDoc.data()?['Address'] as Map<String, dynamic>?;
 
+    // 2. Robust address validation
     if (address == null ||
-        address['state'] == null ||
-        address['city'] == null ||
-        address['local'] == null || (address['local'] as String).isEmpty ||
-        address['pincode'] == null || (address['pincode'] as String).isEmpty ||
-        address['mobile'] == null || (address['mobile'] as String).isEmpty) {
-      _showSnackBar("Please complete your profile address first.", isError: true);
+        (address['state'] as String?)?.isEmpty == true ||
+        (address['local'] as String?)?.isEmpty == true ||
+        (address['pincode'] as String?)?.isEmpty == true ||
+        (address['mobile'] as String?)?.isEmpty == true) {
+      _showSnackBar("Please complete your profile address first.",
+          isError: true);
+
       if (mounted) {
-        Navigator.of(context).push(MaterialPageRoute(builder: (context) => ProfilePage(userId: userID!)));
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => ProfilePage(userId: userID!),
+          ),
+        );
       }
       return;
     }
 
+    // 3. Place order using verified data
     final result = await DatabaseMethods().placeOrder(
       userId: userID!,
       cartItems: List<Map<String, dynamic>>.from(cartProvider.cart),
@@ -168,6 +202,7 @@ class _CartPageState extends State<CartPage> {
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
 
+    // Local total calculation from cart list. [web:25][web:34]
     final total = cart.fold<double>(0, (summation, item) {
       final price = item['Price'] as num? ?? 0;
       final quantity = item['quantity'] as num? ?? 0;
@@ -180,9 +215,14 @@ class _CartPageState extends State<CartPage> {
         child: Container(
           decoration: BoxDecoration(
             color: colorScheme.surface,
-            borderRadius: const BorderRadius.vertical(bottom: Radius.circular(30)),
+            borderRadius:
+                const BorderRadius.vertical(bottom: Radius.circular(30)),
             boxShadow: [
-              BoxShadow(color: Colors.black.withAlpha(25), blurRadius: 12, offset: const Offset(0, 4))
+              BoxShadow(
+                color: Colors.black.withAlpha(25),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
             ],
           ),
           child: SafeArea(
@@ -201,15 +241,18 @@ class _CartPageState extends State<CartPage> {
                   Positioned(
                     right: 0,
                     child: IconButton(
-                      icon: Icon(Icons.shopping_bag_outlined, color: colorScheme.primary),
+                      icon: Icon(
+                        Icons.shopping_bag_outlined,
+                        color: colorScheme.primary,
+                      ),
+                      // userId is guaranteed non-null in this widget
                       onPressed: () {
-                        if (widget.userId != null) {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(builder: (context) => UserOrdersPage(userId: widget.userId!)),
-                          );
-                        } else {
-                          _showSnackBar("User ID not found. Please log in.", isError: true);
-                        }
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                UserOrdersPage(userId: widget.userId),
+                          ),
+                        );
                       },
                     ),
                   ),
@@ -227,6 +270,7 @@ class _CartPageState extends State<CartPage> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
+                    // Lottie empty cart animation. [web:32][web:29]
                     Lottie.asset('images/emptyCart.json', height: 300),
                     const SizedBox(height: 20),
                     Text(
@@ -243,11 +287,14 @@ class _CartPageState extends State<CartPage> {
                 children: [
                   Expanded(
                     child: ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                      padding:
+                          const EdgeInsets.fromLTRB(16, 16, 16, 0),
                       itemCount: cart.length,
                       itemBuilder: (context, index) {
                         final item = cart[index];
-                        final int inventory = int.tryParse(item['inventory']?.toString() ?? '0') ?? 0;
+                        final int inventory =
+                            int.tryParse(item['inventory']?.toString() ?? '0') ??
+                                0;
 
                         return Card(
                           margin: const EdgeInsets.only(bottom: 16),
@@ -263,34 +310,49 @@ class _CartPageState extends State<CartPage> {
                                   width: 120,
                                   height: 120,
                                   fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, size: 80),
+                                  errorBuilder: (_, __, ___) =>
+                                      const Icon(Icons.broken_image, size: 80),
                                 ),
                               ),
                               const SizedBox(width: 16),
                               Expanded(
                                 child: Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 12),
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         item['Name'] ?? 'No Name',
-                                        style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                                        style: textTheme.titleMedium
+                                            ?.copyWith(
+                                                fontWeight:
+                                                    FontWeight.bold),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                       const SizedBox(height: 6),
                                       Text(
                                         '₹${item['Price']}',
-                                        style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: colorScheme.primary),
+                                        style: textTheme.titleMedium?.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                          color: colorScheme.primary,
+                                        ),
                                       ),
-                                      if (inventory < 10) // Display a warning if inventory is low
+                                      if (inventory < 10)
                                         Padding(
-                                          padding: const EdgeInsets.only(top: 4.0),
+                                          padding: const EdgeInsets.only(
+                                              top: 4.0),
                                           child: Text(
-                                            inventory > 0 ? 'Only $inventory left!' : 'Out of Stock',
-                                            style: textTheme.bodySmall?.copyWith(
-                                              color: inventory > 0 ? Colors.orange : colorScheme.error,
+                                            inventory > 0
+                                                ? 'Only $inventory left!'
+                                                : 'Out of Stock',
+                                            style: textTheme.bodySmall
+                                                ?.copyWith(
+                                              color: inventory > 0
+                                                  ? Colors.orange
+                                                  : colorScheme.error,
                                               fontWeight: FontWeight.bold,
                                             ),
                                           ),
@@ -300,21 +362,46 @@ class _CartPageState extends State<CartPage> {
                                         children: [
                                           _buildQuantityButton(
                                             icon: Icons.remove,
-                                            onPressed: () => _handleCartInteraction(() => updateItemQuantity(item['id'], -1)),
+                                            onPressed: () =>
+                                                _handleCartInteraction(
+                                              () => updateItemQuantity(
+                                                  item['id'], -1),
+                                            ),
                                           ),
                                           Padding(
-                                            padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                                            child: Text('${item['quantity']}', style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                                            padding:
+                                                const EdgeInsets.symmetric(
+                                                    horizontal: 8.0),
+                                            child: Text(
+                                              '${item['quantity']}',
+                                              style: textTheme.titleMedium
+                                                  ?.copyWith(
+                                                fontWeight:
+                                                    FontWeight.bold,
+                                              ),
+                                            ),
                                           ),
                                           _buildQuantityButton(
                                             icon: Icons.add,
-                                            onPressed: () => _handleCartInteraction(() => updateItemQuantity(item['id'], 1)),
-                                            isEnabled: inventory > 0 && (item['quantity'] as int) < inventory,
+                                            onPressed: () =>
+                                                _handleCartInteraction(
+                                              () => updateItemQuantity(
+                                                  item['id'], 1),
+                                            ),
+                                            isEnabled: inventory > 0 &&
+                                                (item['quantity'] as int) <
+                                                    inventory,
                                           ),
                                           const Spacer(),
                                           IconButton(
-                                            icon: Icon(Icons.delete_outline, color: colorScheme.error),
-                                            onPressed: () => _handleCartInteraction(() => removeItem(item['id'])),
+                                            icon: Icon(
+                                              Icons.delete_outline,
+                                              color: colorScheme.error,
+                                            ),
+                                            onPressed: () =>
+                                                _handleCartInteraction(
+                                              () => removeItem(item['id']),
+                                            ),
                                           ),
                                         ],
                                       )
@@ -328,7 +415,6 @@ class _CartPageState extends State<CartPage> {
                       },
                     ),
                   ),
-                  // Checkout section is now at the bottom of the Column
                   _buildCheckoutSection(total),
                 ],
               ),
@@ -336,7 +422,11 @@ class _CartPageState extends State<CartPage> {
     );
   }
 
-  Widget _buildQuantityButton({required IconData icon, required VoidCallback onPressed, bool isEnabled = true}) {
+  Widget _buildQuantityButton({
+    required IconData icon,
+    required VoidCallback onPressed,
+    bool isEnabled = true,
+  }) {
     return InkWell(
       onTap: isEnabled ? onPressed : null,
       borderRadius: BorderRadius.circular(20),
@@ -364,7 +454,13 @@ class _CartPageState extends State<CartPage> {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: colorScheme.surface,
-        boxShadow: [BoxShadow(color: Colors.black.withAlpha(25), blurRadius: 20, offset: const Offset(0, -10))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(25),
+            blurRadius: 20,
+            offset: const Offset(0, -10),
+          )
+        ],
         borderRadius: BorderRadius.circular(20),
       ),
       child: Column(
@@ -373,8 +469,18 @@ class _CartPageState extends State<CartPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Total', style: textTheme.titleLarge?.copyWith(color: Colors.grey[700])),
-              Text('₹${total.toStringAsFixed(2)}', style: textTheme.headlineSmall?.copyWith(color: colorScheme.primary, fontWeight: FontWeight.bold)),
+              Text(
+                'Total',
+                style: textTheme.titleLarge
+                    ?.copyWith(color: Colors.grey[700]),
+              ),
+              Text(
+                '₹${total.toStringAsFixed(2)}',
+                style: textTheme.headlineSmall?.copyWith(
+                  color: colorScheme.primary,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 20),
@@ -382,9 +488,13 @@ class _CartPageState extends State<CartPage> {
             width: double.infinity,
             height: 55,
             child: ElevatedButton(
-              onPressed: _isBusy ? null : () => _handleCartInteraction(_handlePlaceOrder),
+              onPressed: _isBusy
+                  ? null
+                  : () => _handleCartInteraction(_handlePlaceOrder),
               child: _isBusy
-                  ? CircularProgressIndicator(color: colorScheme.onPrimary)
+                  ? CircularProgressIndicator(
+                      color: colorScheme.onPrimary,
+                    )
                   : const Text("Place Order"),
             ),
           ),

@@ -14,13 +14,21 @@
       },
       "oauth_client": [
         {
+          "client_id": "52345924540-69s7qnfgvg59fpjs7ds33k3e2uqj58tf.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.classified.ecommerce_shop",
+            "certificate_hash": "fdac5cf9db966837cdc6b35615a63c5e4e97e114"
+          }
+        },
+        {
           "client_id": "52345924540-avhagumi7ssps1vtgmkjds3321m8ou42.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyD4JZVYsdyNOCJYwwO97oVULjNXnfFHSYk"
+          "current_key": "AIzaSyDKt5NHM1GvxQUsdIrILd5SBg8FK_tAzjs"
         }
       ],
       "services": {
@@ -50,13 +58,21 @@
       },
       "oauth_client": [
         {
+          "client_id": "52345924540-3a9ho54cbrlsacvfnbgqlm511dcsg1it.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.classified.kartsy",
+            "certificate_hash": "fdac5cf9db966837cdc6b35615a63c5e4e97e114"
+          }
+        },
+        {
           "client_id": "52345924540-avhagumi7ssps1vtgmkjds3321m8ou42.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyD4JZVYsdyNOCJYwwO97oVULjNXnfFHSYk"
+          "current_key": "AIzaSyDKt5NHM1GvxQUsdIrILd5SBg8FK_tAzjs"
         }
       ],
       "services": {

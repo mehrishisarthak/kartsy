@@ -13,7 +13,7 @@ class CategoryProducts extends StatefulWidget {
 class _CategoryProductsState extends State<CategoryProducts> {
   // --- Pagination Variables ---
   final ScrollController _scrollController = ScrollController();
-  List<DocumentSnapshot> _products = [];
+  final List<DocumentSnapshot> _products = [];
   bool _isLoading = false;
   bool _hasMore = true;
   DocumentSnapshot? _lastDocument;

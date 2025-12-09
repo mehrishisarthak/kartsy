@@ -10,11 +10,20 @@ android {
     compileSdk = 36 // <-- REQUIRED CHANGE: Updated from 35
 
     ndkVersion = "27.0.12077973"
+    
+    
+    configurations.all {
+        resolutionStrategy {
+            force("androidx.core:core-ktx:1.15.0")
+            force("androidx.core:core:1.15.0")
+            force("androidx.browser:browser:1.8.0")
+        }
+    }
 
     defaultConfig {
-        applicationId = "com.classified.kartsy"
+        applicationId = "com.classified.ecommerce_shop"
         minSdk = flutter.minSdkVersion
-        targetSdk = 36 // <-- BEST PRACTICE: Updated from 35 to match compileSdk
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0.0"
     }
