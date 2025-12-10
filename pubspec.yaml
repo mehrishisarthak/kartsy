@@ -61,7 +61,6 @@ flutter:
     - images/maintenance.json
     - images/shopping2.json
     - images/shopping3.json
-    - images/admin.gif
     - lib/assets/images/default_profile.png
     - lib/assets/images/app_icon.png
 

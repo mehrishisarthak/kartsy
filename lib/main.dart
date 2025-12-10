@@ -1,5 +1,4 @@
 import 'package:ecommerce_shop/firebase_options.dart';
-import 'package:ecommerce_shop/pages/bottomnav.dart';
 import 'package:ecommerce_shop/services/cart_provider.dart';
 import 'package:ecommerce_shop/services/root_wrapper.dart';
 import 'package:ecommerce_shop/theme/theme_data.dart';

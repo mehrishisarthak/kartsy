@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ecommerce_shop/pages/product_details.dart';
 import 'package:ecommerce_shop/pages/seach_page.dart'; 
 import 'package:flutter/material.dart';
+import 'package:shimmer/shimmer.dart';
 
 class DiscoverPage extends StatefulWidget {
   const DiscoverPage({super.key});
@@ -11,7 +12,6 @@ class DiscoverPage extends StatefulWidget {
 }
 
 class _DiscoverPageState extends State<DiscoverPage> {
-  // --- PAGINATION VARIABLES ---
   final ScrollController _scrollController = ScrollController();
   final List<DocumentSnapshot> _products = [];
   bool _isLoading = false;
@@ -22,9 +22,8 @@ class _DiscoverPageState extends State<DiscoverPage> {
   @override
   void initState() {
     super.initState();
-    _fetchProducts(); // Load initial batch
+    _fetchProducts();
 
-    // Listener for Infinite Scrolling
     _scrollController.addListener(() {
       if (_scrollController.position.pixels >= 
           _scrollController.position.maxScrollExtent - 100) {
@@ -39,7 +38,6 @@ class _DiscoverPageState extends State<DiscoverPage> {
     super.dispose();
   }
 
-  /// Fetches products in chunks
   Future<void> _fetchProducts() async {
     if (_isLoading || !_hasMore) return;
 
@@ -48,7 +46,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
     try {
       Query query = FirebaseFirestore.instance
           .collection('products')
-          .orderBy('Name') // Required for consistent pagination
+          .orderBy('Name')
           .limit(_limit);
 
       if (_lastDocument != null) {
@@ -64,9 +62,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
       if (snapshot.docs.isNotEmpty) {
         _lastDocument = snapshot.docs.last;
         if (mounted) {
-          setState(() {
-            _products.addAll(snapshot.docs);
-          });
+          setState(() => _products.addAll(snapshot.docs));
         }
       }
     } catch (e) {
@@ -76,7 +72,6 @@ class _DiscoverPageState extends State<DiscoverPage> {
     }
   }
 
-  // --- Helper Widget for Ratings ---
   Widget _buildRatingRow(Map<String, dynamic> data) {
     double rating = (data['averageRating'] as num?)?.toDouble() ?? 0.0;
     int count = (data['reviewCount'] as num?)?.toInt() ?? 0;
@@ -102,59 +97,82 @@ class _DiscoverPageState extends State<DiscoverPage> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Discover Products'),
-        centerTitle: true,
+  // 🔥 SHIMMER PRODUCT CARD (NEW)
+  Widget _buildProductShimmer() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          ),
+        ],
       ),
-      // ListView.builder handles Header (Index 0) + Products + Loader
-      body: ListView.builder(
-        controller: _scrollController,
-        padding: const EdgeInsets.only(bottom: 20),
-        itemCount: 1 + _products.length + (_hasMore ? 1 : 0),
-        itemBuilder: (context, index) {
-          
-          // --- INDEX 0: THE HEADER (Search, Info, Title) ---
-          if (index == 0) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 20),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                  child: _buildSearchField(),
-                ),
-                const SizedBox(height: 24),
-                _buildInfoSection(),
-                const SizedBox(height: 24),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                  child: Text(
-                    "All Products",
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-                  ),
-                ),
-                const SizedBox(height: 10),
-              ],
-            );
-          }
-
-          // --- LAST INDEX: THE LOADING SPINNER ---
-          if (index == _products.length + 1) {
-            return const Center(
-              child: Padding(
-                padding: EdgeInsets.all(20.0),
-                child: CircularProgressIndicator(),
+      child: Shimmer.fromColors(
+        baseColor: Colors.grey[300]!,
+        highlightColor: Colors.grey[100]!,
+        child: Row(
+          children: [
+            // Image shimmer
+            Container(
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
               ),
-            );
-          }
-
-          // --- MIDDLE INDICES: THE PRODUCT CARDS ---
-          final productData = _products[index - 1].data() as Map<String, dynamic>;
-          return _buildProductCard(productData);
-        },
+            ),
+            const SizedBox(width: 20),
+            // Details shimmer
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 120,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: 80,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: 100,
+                    height: 16,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Arrow shimmer
+            Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -165,10 +183,12 @@ class _DiscoverPageState extends State<DiscoverPage> {
     final textTheme = theme.textTheme;
 
     return GestureDetector(
-      onTap: () {
-         Navigator.push(context, MaterialPageRoute(
-             builder: (context) => ProductDetails(productId: productData['id'])));
-      },
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ProductDetails(productId: productData['id']),
+        ),
+      ),
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -185,7 +205,6 @@ class _DiscoverPageState extends State<DiscoverPage> {
         ),
         child: Row(
           children: [
-            // Image
             ClipRRect(
               borderRadius: BorderRadius.circular(10),
               child: Container(
@@ -197,17 +216,23 @@ class _DiscoverPageState extends State<DiscoverPage> {
                   fit: BoxFit.cover,
                   loadingBuilder: (context, child, progress) {
                     if (progress == null) return child;
-                    return const SizedBox(
-                        height: 100, width: 100, 
-                        child: Center(child: Icon(Icons.image, size: 30, color: Colors.grey)));
+                    return Container(
+                      height: 100,
+                      width: 100,
+                      color: Colors.grey[200],
+                      child: const Center(child: Icon(Icons.image, size: 30, color: Colors.grey)),
+                    );
                   },
-                  errorBuilder: (context, error, stackTrace) =>
-                      Container(height: 100, width: 100, color: Colors.grey[200], child: const Icon(Icons.broken_image)),
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    height: 100,
+                    width: 100,
+                    color: Colors.grey[200],
+                    child: const Icon(Icons.broken_image),
+                  ),
                 ),
               ),
             ),
             const SizedBox(width: 20),
-            // Details
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -218,11 +243,8 @@ class _DiscoverPageState extends State<DiscoverPage> {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  
-                  // --- RATING ROW ADDED ---
                   const SizedBox(height: 5),
                   _buildRatingRow(productData),
-                  
                   const SizedBox(height: 5),
                   Text(
                     "₹${productData['Price']}",
@@ -234,7 +256,6 @@ class _DiscoverPageState extends State<DiscoverPage> {
                 ],
               ),
             ),
-            // Arrow
             Container(
               padding: const EdgeInsets.all(5),
               decoration: BoxDecoration(
@@ -251,13 +272,11 @@ class _DiscoverPageState extends State<DiscoverPage> {
 
   Widget _buildSearchField() {
     return GestureDetector(
-      onTap: () {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const SearchPage()));
-      },
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SearchPage())),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.grey[200], // Adjust based on your theme
+          color: Colors.grey[200],
           borderRadius: BorderRadius.circular(10),
         ),
         child: const Row(
@@ -302,6 +321,56 @@ class _DiscoverPageState extends State<DiscoverPage> {
           const SizedBox(width: 12),
           Text(text, style: textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
         ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Discover Products'),
+        centerTitle: true,
+      ),
+      body: ListView.builder(
+        controller: _scrollController,
+        padding: const EdgeInsets.only(bottom: 20),
+        itemCount: 1 + _products.length + (_isLoading ? 3 : (_hasMore ? 1 : 0)), // 🔥 3 SHIMMERS
+        itemBuilder: (context, index) {
+          // Header (Index 0)
+          if (index == 0) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 20),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                  child: _buildSearchField(),
+                ),
+                const SizedBox(height: 24),
+                _buildInfoSection(),
+                const SizedBox(height: 24),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                  child: Text(
+                    "All Products",
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+            );
+          }
+
+          // 🔥 SHIMMER LOADING (Last 3 indices)
+          if (index >= _products.length + 1) {
+            return _buildProductShimmer();
+          }
+
+          // Real products
+          final productData = _products[index - 1].data() as Map<String, dynamic>;
+          return _buildProductCard(productData);
+        },
       ),
     );
   }

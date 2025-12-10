@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:ecommerce_shop/pages/admin_login.dart';
 import 'package:ecommerce_shop/pages/order_screen.dart'; 
 import 'package:ecommerce_shop/pages/settings.dart';
 import 'package:ecommerce_shop/services/shared_preferences.dart';
@@ -64,8 +63,12 @@ class _ProfilePageState extends State<ProfilePage> {
   final SharedPreferenceHelper _prefs = SharedPreferenceHelper();
   final FirebaseAuth _auth = FirebaseAuth.instance;
   
+  // Stores original data from Firestore/Cache for change detection
   Map<String, dynamic>? personData;
-  File? _imageFile;
+  Map<String, dynamic>? _initialAddress; 
+  String? _initialImage;
+
+  File? _imageFile; // New image file for upload
   bool _isLoading = false;
 
   String? _selectedState, _selectedCity;
@@ -86,15 +89,36 @@ class _ProfilePageState extends State<ProfilePage> {
     super.initState();
     userID = widget.userId;
     loadUserData();
+
+    // Add listeners to text controllers to trigger rebuild for button color change
+    _localAddressController.addListener(_onFieldChanged);
+    _pincodeController.addListener(_onFieldChanged);
+    _mobileController.addListener(_onFieldChanged);
+
     _mobileController.addListener(() {
       if (_isPhoneVerified && '+91${_mobileController.text.trim()}' != _verifiedPhoneNumber) {
-        setState(() => _isPhoneVerified = false);
+        // Only trigger rebuild if verification status actually changes
+        if(mounted && _isPhoneVerified) setState(() => _isPhoneVerified = false);
       }
+      _onFieldChanged(); // Also check for general changes
     });
+  }
+
+  /// Triggers a rebuild to check for changes and update the Save button color.
+  void _onFieldChanged() {
+    // Only rebuild if it's necessary (e.g., to update the Save button state)
+    if (mounted) {
+      setState(() {
+        // Empty setState to re-evaluate _hasChanges() in the build method
+      });
+    }
   }
 
   @override
   void dispose() {
+    _localAddressController.removeListener(_onFieldChanged);
+    _pincodeController.removeListener(_onFieldChanged);
+    _mobileController.removeListener(_onFieldChanged);
     _localAddressController.dispose();
     _pincodeController.dispose();
     _mobileController.dispose();
@@ -104,13 +128,13 @@ class _ProfilePageState extends State<ProfilePage> {
   /// Loads user data from Firestore + cache
   Future<void> loadUserData() async {
     try {
-      // Load cache first for instant UI
+      // 1. Load cache first for instant UI (Fast read, few reads from Firestore)
       final cachedAddress = await _prefs.getUserAddress();
       if (cachedAddress != null && mounted) {
-        _updateAddressFields(cachedAddress);
+        _updateAddressFields(cachedAddress, isInitialLoad: true);
       }
 
-      // Fetch fresh from Firestore
+      // 2. Fetch fresh from Firestore (Slow read, ensures latest data)
       final doc = await FirebaseFirestore.instance
           .collection('users')
           .doc(userID)
@@ -118,11 +142,14 @@ class _ProfilePageState extends State<ProfilePage> {
       
       if (doc.exists && mounted) {
         final firestoreData = doc.data()!;
-        setState(() => personData = firestoreData);
+        setState(() {
+          personData = firestoreData;
+          _initialImage = firestoreData['Image']; // Set initial image URL
+        });
         
         final address = firestoreData['Address'];
         if (address is Map<String, dynamic>) {
-          _updateAddressFields(address);
+          _updateAddressFields(address, isInitialLoad: true);
         }
       }
     } catch (e) {
@@ -131,8 +158,10 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  /// Update form fields from address data
-  void _updateAddressFields(Map<String, dynamic> address) {
+  /// Update form fields from address data and store initial state
+  void _updateAddressFields(Map<String, dynamic> address, {bool isInitialLoad = false}) {
+    final mobile = address['mobile'] ?? '';
+
     setState(() {
       _selectedState = address['state'];
       if (_selectedState != null) {
@@ -141,8 +170,6 @@ class _ProfilePageState extends State<ProfilePage> {
       _selectedCity = address['city'];
       _localAddressController.text = address['local'] ?? '';
       _pincodeController.text = address['pincode'] ?? '';
-      
-      final mobile = address['mobile'] ?? '';
       _mobileController.text = mobile.replaceFirst('+91', '');
 
       // Auto-verify if matches current user phone
@@ -151,7 +178,47 @@ class _ProfilePageState extends State<ProfilePage> {
         _isPhoneVerified = true;
         _verifiedPhoneNumber = mobile;
       }
+      
+      // Store initial state for change detection
+      if (isInitialLoad) {
+        _initialAddress = {
+          'state': _selectedState,
+          'city': _selectedCity,
+          'local': _localAddressController.text.trim(),
+          'pincode': _pincodeController.text.trim(),
+          'mobile': _verifiedPhoneNumber,
+        };
+      }
     });
+  }
+
+  /// Checks if any profile field has been changed or a new image has been selected.
+  bool _hasChanges() {
+    if (_initialAddress == null) return false; // Data hasn't loaded yet
+
+    // Check if new image is selected
+    if (_imageFile != null) return true;
+
+    // Check if any address field has changed
+    final currentMobile = _mobileController.text.trim().isEmpty ? null : '+91${_mobileController.text.trim()}';
+    
+    final currentAddress = {
+      'state': _selectedState,
+      'city': _selectedCity,
+      'local': _localAddressController.text.trim(),
+      'pincode': _pincodeController.text.trim(),
+      // Use the verified phone number for comparison if phone is verified and no changes to text field
+      'mobile': _isPhoneVerified ? _verifiedPhoneNumber : currentMobile, 
+    };
+
+    // Simple comparison of map values
+    return _initialAddress!['state'] != currentAddress['state'] ||
+           _initialAddress!['city'] != currentAddress['city'] ||
+           _initialAddress!['local'] != currentAddress['local'] ||
+           _initialAddress!['pincode'] != currentAddress['pincode'] ||
+           _initialAddress!['mobile'] != currentAddress['mobile'] ||
+           (_imageFile != null && _imageFile!.path.isNotEmpty) || // Check for image change
+           (_initialImage != null && _imageFile != null); // Force change if a new image is selected
   }
 
   /// Pick and compress profile image
@@ -178,6 +245,7 @@ class _ProfilePageState extends State<ProfilePage> {
         }
         
         setState(() => _imageFile = imageFile);
+        _onFieldChanged(); // Trigger rebuild to check for changes
       }
     } catch (e) {
       _showErrorSnackBar("Failed to pick image: $e");
@@ -214,6 +282,7 @@ class _ProfilePageState extends State<ProfilePage> {
       
       if (querySnapshot.docs.isNotEmpty && querySnapshot.docs.first.id != currentUser?.uid) {
         _showErrorSnackBar("Phone number is already in use by another account.");
+        setState(() => _isLoading = false);
         return;
       }
 
@@ -285,6 +354,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   setState(() {
                     _isPhoneVerified = true;
                     _verifiedPhoneNumber = '+91${_mobileController.text.trim()}';
+                    _onFieldChanged(); // Trigger check for changes
                   });
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -302,8 +372,12 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  /// ✅ FIXED: Complete profile save with proper error handling
+  /// Complete profile save with proper error handling
   Future<void> _saveProfile() async {
+    if (!_hasChanges()) {
+      _showErrorSnackBar("No changes to save.");
+      return;
+    }
     if (!_isPhoneVerified) {
       _showErrorSnackBar("Please verify your phone number before saving.");
       return;
@@ -349,26 +423,26 @@ class _ProfilePageState extends State<ProfilePage> {
         'mobile': _verifiedPhoneNumber,
       };
 
-      // 3. Complete user profile
+      // 3. Complete user profile data to save
       final completeUserProfile = {
         'Name': personData?['Name'] ?? _auth.currentUser?.displayName ?? 'User',
         'Email': personData?['Email'] ?? _auth.currentUser?.email ?? '',
         'Image': imageUrl,
         'Address': structuredAddress,
-        'createdAt': FieldValue.serverTimestamp(),
+        'createdAt': personData?['createdAt'] ?? FieldValue.serverTimestamp(), // Preserve original creation time
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
       print('💾 Saving profile to Firestore: $userID');
       print('📍 Address: $structuredAddress');
 
-      // 4. ✅ FIXED: Use set() with merge: true (creates doc if missing)
+      // 4. Use set() with merge: true (creates doc if missing/updates existing)
       await FirebaseFirestore.instance
           .collection('users')
           .doc(userID)
           .set(completeUserProfile, SetOptions(merge: true));
 
-      // 5. Cache locally
+      // 5. Cache locally (for faster next load)
       await _prefs.saveUserAddress(structuredAddress);
       
       print('✅ Profile saved successfully for user: $userID');
@@ -379,7 +453,7 @@ class _ProfilePageState extends State<ProfilePage> {
         );
       }
       
-      // Refresh data
+      // Refresh data and initial state
       await loadUserData();
       
     } catch (e, stackTrace) {
@@ -390,7 +464,8 @@ class _ProfilePageState extends State<ProfilePage> {
       if (mounted) {
         setState(() { 
           _isLoading = false; 
-          _imageFile = null; 
+          _imageFile = null; // Clear image file after successful upload/save
+          _onFieldChanged(); // Re-evaluate changes
         });
       }
     }
@@ -412,7 +487,10 @@ class _ProfilePageState extends State<ProfilePage> {
                 child: Text(item, overflow: TextOverflow.ellipsis),
               ))
           .toList(),
-      onChanged: onChanged,
+      onChanged: (newValue) {
+        onChanged?.call(newValue);
+        _onFieldChanged(); // Trigger change check
+      },
       decoration: const InputDecoration(),
     );
   }
@@ -442,6 +520,11 @@ class _ProfilePageState extends State<ProfilePage> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
+
+    // Check for changes to determine button color and active state
+    final bool hasChanges = _hasChanges();
+    final bool isButtonDisabled = _isLoading || !hasChanges;
+    final Color buttonColor = isButtonDisabled ? Colors.grey : colorScheme.primary;
 
     ImageProvider imageProvider;
     if (_imageFile != null) {
@@ -485,7 +568,8 @@ class _ProfilePageState extends State<ProfilePage> {
       body: personData == null
           ? const ProfileShimmer()
           : SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(24, 24, 24, 120),
+              // Added extra padding at the bottom for the BottomNavigationBar
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 100), 
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
@@ -625,8 +709,9 @@ class _ProfilePageState extends State<ProfilePage> {
                 ],
               ),
             ),
+      // --- START: Bottom Bar for Save Profile ---
       bottomNavigationBar: Container(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
         decoration: BoxDecoration(
           color: colorScheme.surface,
           boxShadow: [
@@ -640,29 +725,33 @@ class _ProfilePageState extends State<ProfilePage> {
         child: SizedBox(
           height: 55,
           width: double.infinity,
-          child: ElevatedButton(
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const AdminLoginPage()),
+          child: ElevatedButton.icon(
+            onPressed: isButtonDisabled ? null : _saveProfile, // Use disabled state based on changes
+            icon: _isLoading
+                ? SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(
+                      color: colorScheme.onPrimary,
+                      strokeWidth: 2,
+                    ),
+                  )
+                : const Icon(Icons.save),
+            label: Text(_isLoading ? "Saving..." : "Save Profile"),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: buttonColor, // Dynamic color based on changes
+              foregroundColor: colorScheme.onPrimary,
+              disabledBackgroundColor: Colors.grey.shade400, // Explicit disabled color
+              disabledForegroundColor: Colors.grey.shade700,
+              textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
-            child: const Text("Are you an admin? Tap here"),
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _isLoading ? null : _saveProfile,
-        label: Text(_isLoading ? "Saving..." : "Save Profile"),
-        icon: _isLoading
-            ? SizedBox(
-                height: 20,
-                width: 20,
-                child: CircularProgressIndicator(
-                  color: colorScheme.onPrimary,
-                  strokeWidth: 2,
-                ),
-              )
-            : const Icon(Icons.save),
-      ),
+      // --- END: Bottom Bar for Save Profile ---
+      // Removed the FloatingActionButton
+      // floatingActionButton: FloatingActionButton.extended(...)
     );
   }
 }

@@ -83,7 +83,7 @@ class _CartPageState extends State<CartPage> {
         .doc(itemId);
 
     try {
-      // Atomic quantity update in Firestore transaction. [web:22][web:27]
+      // Atomic quantity update in Firestore transaction.
       await FirebaseFirestore.instance.runTransaction((transaction) async {
         final docSnapshot = await transaction.get(docRef);
 
@@ -145,7 +145,7 @@ class _CartPageState extends State<CartPage> {
     }
   }
 
-  // Address validation via Firestore user document. [web:24][web:31]
+  // --- UPDATED ORDER PLACEMENT LOGIC ---
   Future<void> _handlePlaceOrder() async {
     if (userID == null) {
       _showSnackBar("Please log in to place an order.", isError: true);
@@ -163,14 +163,16 @@ class _CartPageState extends State<CartPage> {
         .collection('users')
         .doc(userID)
         .get();
-    final address = userDoc.data()?['Address'] as Map<String, dynamic>?;
+    
+    // Using 'addressMap' to distinguish from the string we create later
+    final addressMap = userDoc.data()?['Address'] as Map<String, dynamic>?;
 
     // 2. Robust address validation
-    if (address == null ||
-        (address['state'] as String?)?.isEmpty == true ||
-        (address['local'] as String?)?.isEmpty == true ||
-        (address['pincode'] as String?)?.isEmpty == true ||
-        (address['mobile'] as String?)?.isEmpty == true) {
+    if (addressMap == null ||
+        (addressMap['state'] as String?)?.isEmpty == true ||
+        (addressMap['local'] as String?)?.isEmpty == true ||
+        (addressMap['pincode'] as String?)?.isEmpty == true ||
+        (addressMap['mobile'] as String?)?.isEmpty == true) {
       _showSnackBar("Please complete your profile address first.",
           isError: true);
 
@@ -184,11 +186,16 @@ class _CartPageState extends State<CartPage> {
       return;
     }
 
-    // 3. Place order using verified data
+    // 3. Format the Address Map into a Single String for the Order
+    // This ensures the delivery boy sees the snapshot of the address used AT TIME OF ORDER
+    String formattedAddress = "${addressMap['local']}, ${addressMap['city'] ?? ''}, ${addressMap['state']} - ${addressMap['pincode']}\nPhone: ${addressMap['mobile']}";
+
+    // 4. Place order using verified data AND passing the address
     final result = await DatabaseMethods().placeOrder(
       userId: userID!,
       cartItems: List<Map<String, dynamic>>.from(cartProvider.cart),
       cartProvider: cartProvider,
+      address: formattedAddress, // ✅ Passing the formatted address string
     );
 
     _showSnackBar(result, isError: !result.contains("successfully"));
@@ -202,7 +209,6 @@ class _CartPageState extends State<CartPage> {
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
 
-    // Local total calculation from cart list. [web:25][web:34]
     final total = cart.fold<double>(0, (summation, item) {
       final price = item['Price'] as num? ?? 0;
       final quantity = item['quantity'] as num? ?? 0;
@@ -245,7 +251,6 @@ class _CartPageState extends State<CartPage> {
                         Icons.shopping_bag_outlined,
                         color: colorScheme.primary,
                       ),
-                      // userId is guaranteed non-null in this widget
                       onPressed: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
@@ -270,7 +275,6 @@ class _CartPageState extends State<CartPage> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // Lottie empty cart animation. [web:32][web:29]
                     Lottie.asset('images/emptyCart.json', height: 300),
                     const SizedBox(height: 20),
                     Text(

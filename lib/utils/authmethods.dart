@@ -1,21 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'dart:convert';
-import 'package:crypto/crypto.dart';
+// Removed: dart:convert and crypto/crypto as they were only used for admin password hashing
 
 class AuthMethods {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // 🔒 Secure password hashing (SHA256 + salt)
-  String _hashPassword(String password) {
-    return sha256.convert(utf8.encode(password + 'kartsy_admin_salt_2025_secure')).toString();
-  }
-
-  bool _verifyPasswordHash(String password, String storedHash) {
-    return _hashPassword(password) == storedHash;
-  }
+  // Removed: _hashPassword and _verifyPasswordHash as they were only for admin login.
 
   /// Sign up a new user with email/password and send a verification email.
   Future<String> signUpUser({
@@ -32,8 +24,10 @@ class AuthMethods {
           password: password.trim(),
         );
 
+        // Send email verification
         await cred.user?.sendEmailVerification();
 
+        // Save user data to Firestore
         await _firestore.collection('users').doc(cred.user!.uid).set({
           'Name': username.trim(),
           'Email': email.trim(),
@@ -66,31 +60,31 @@ class AuthMethods {
   }
 
   /// Send password reset email
-Future<String> forgotPassword({required String email}) async {
-  String res = "Some error occurred";
-  try {
-    if (email.isEmpty) {
-      return "Please enter your email address.";
+  Future<String> forgotPassword({required String email}) async {
+    String res = "Some error occurred";
+    try {
+      if (email.isEmpty) {
+        return "Please enter your email address.";
+      }
+      
+      await _auth.sendPasswordResetEmail(email: email.trim());
+      res = "Password reset link sent! Check your inbox.";
+    } on FirebaseAuthException catch (err) {
+      switch (err.code) {
+        case 'invalid-email':
+          res = "Invalid email address.";
+          break;
+        case 'user-not-found':
+          res = "No account found with this email.";
+          break;
+        default:
+          res = err.message ?? "Failed to send reset email.";
+      }
+    } catch (e) {
+      res = "Something went wrong. Please try again.";
     }
-    
-    await _auth.sendPasswordResetEmail(email: email.trim());
-    res = "Password reset link sent! Check your inbox.";
-  } on FirebaseAuthException catch (err) {
-    switch (err.code) {
-      case 'invalid-email':
-        res = "Invalid email address.";
-        break;
-      case 'user-not-found':
-        res = "No account found with this email.";
-        break;
-      default:
-        res = err.message ?? "Failed to send reset email.";
-    }
-  } catch (e) {
-    res = "Something went wrong. Please try again.";
+    return res;
   }
-  return res;
-}
 
   /// Sign in an existing user with email/password and check for email verification.
   Future<String> signInUser({
@@ -108,6 +102,7 @@ Future<String> forgotPassword({required String email}) async {
         if (cred.user != null && cred.user!.emailVerified) {
           res = "Login successful.";
         } else {
+          // If login is successful but email is not verified, sign out and inform the user
           await _auth.signOut();
           res = "Please verify your email before logging in. Check your inbox for a verification link.";
         }
@@ -163,6 +158,7 @@ Future<String> forgotPassword({required String email}) async {
       if (user != null) {
         final userDoc = await _firestore.collection('users').doc(user.uid).get();
 
+        // Create a user document in Firestore if it doesn't exist (i.e., this is a first-time sign-in)
         if (!userDoc.exists) {
           await _firestore.collection('users').doc(user.uid).set({
             'Name': user.displayName ?? 'No Name Provided',
@@ -185,89 +181,13 @@ Future<String> forgotPassword({required String email}) async {
 
   /// Sign out the current user from Firebase and Google.
   Future<void> signOut() async {
-    await GoogleSignIn().signOut();
+    // Attempt to sign out from Google first
+    if (await GoogleSignIn().isSignedIn()) {
+      await GoogleSignIn().signOut();
+    }
+    // Sign out from Firebase
     await _auth.signOut();
   }
 
-  /// 🔒 SECURE ADMIN LOGIN with hashing + rate limiting
-  Future<String> signInAdmin({
-    required String username,
-    required String password,
-  }) async {
-    String res = "Some error occurred";
-    final trimmedUsername = username.trim().toLowerCase();
-    final now = DateTime.now();
-    
-    try {
-      if (trimmedUsername.isEmpty || password.isEmpty) {
-        return "Please fill in all the fields.";
-      }
-
-      // 🔥 RATE LIMITING (3 attempts/hour per device)
-      final deviceId = _auth.currentUser?.uid ?? 'anonymous_${DateTime.now().millisecondsSinceEpoch}';
-      final attemptsDoc = await _firestore
-          .collection('admin_attempts')
-          .doc(trimmedUsername)
-          .get();
-      
-      final attempts = attemptsDoc.data()?['count'] ?? 0;
-      final lastAttempt = attemptsDoc.data()?['last_attempt']?.toDate() ?? 
-                         now.subtract(const Duration(hours: 1));
-      
-      if (now.difference(lastAttempt).inHours < 1 && attempts >= 3) {
-        return "Too many failed attempts. Try again in 1 hour.";
-      }
-
-      // 🔥 SECURE ADMIN LOOKUP
-      final snapshot = await _firestore
-          .collection('Admin')
-          .where("username", isEqualTo: trimmedUsername)
-          .limit(1)
-          .get();
-
-      if (snapshot.docs.isEmpty) {
-        await _incrementFailedAttempt(trimmedUsername);
-        res = "No admin found with this username.";
-      } else {
-        final adminData = snapshot.docs.first.data();
-        final storedHash = adminData['password_hash'] as String?;
-
-        if (storedHash != null && _verifyPasswordHash(password, storedHash)) {
-          // ✅ SUCCESS - Reset attempts + log login
-          await _resetAttempts(trimmedUsername);
-          await _logAdminLogin(snapshot.docs.first.id, trimmedUsername);
-          res = "Login successful.";
-        } else {
-          await _incrementFailedAttempt(trimmedUsername);
-          res = "Incorrect password.";
-        }
-      }
-    } catch (e) {
-      print("⛔ Admin login error: $e");
-      res = "Something went wrong. Please try again.";
-    }
-    return res;
-  }
-
-  // 🔥 Rate limiting helpers
-  Future<void> _incrementFailedAttempt(String username) async {
-    final docRef = _firestore.collection('admin_attempts').doc(username);
-    await docRef.set({
-      'count': FieldValue.increment(1),
-      'last_attempt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-  }
-
-  Future<void> _resetAttempts(String username) async {
-    await _firestore.collection('admin_attempts').doc(username).delete();
-  }
-
-  Future<void> _logAdminLogin(String adminId, String username) async {
-    await _firestore.collection('admin_logs').add({
-      'admin_id': adminId,
-      'username': username,
-      'timestamp': FieldValue.serverTimestamp(),
-      'ip_address': 'mobile_device', // Add real IP from backend later
-    });
-  }
+  // Removed: signInAdmin method and its helper functions (_incrementFailedAttempt, _resetAttempts, _logAdminLogin).
 }

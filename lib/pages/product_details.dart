@@ -3,7 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ecommerce_shop/services/cart_provider.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // Import Firebase Auth
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
@@ -20,7 +20,7 @@ class ProductDetails extends StatefulWidget {
 }
 
 class _ProductDetailsState extends State<ProductDetails> {
-  bool _isLoading = false; 
+  bool _isLoading = false;
   bool _show3D = false;
   int _currentImageIndex = 0;
   final ScrollController _scrollController = ScrollController();
@@ -101,11 +101,10 @@ class _ProductDetailsState extends State<ProductDetails> {
     }
   }
 
-  // --- 3. ADD TO CART (UPDATED LOGIC) ---
+  // --- 3. ADD TO CART ---
   Future<void> _handleAddToCart(Map<String, dynamic> productData) async {
     setState(() => _isLoading = true);
     try {
-      // ⭐️ EXPLANATION: We ask Firebase "Who is logged in?"
       final userId = FirebaseAuth.instance.currentUser?.uid;
       
       if (userId == null) {
@@ -113,18 +112,27 @@ class _ProductDetailsState extends State<ProductDetails> {
       }
 
       if (mounted) {
-        // We pass that userId to the CartProvider
         await Provider.of<CartProvider>(context, listen: false)
             .addToCart(userId, productData);
         
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Product added to cart!"), backgroundColor: Colors.green),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("✅ Added to cart!"), 
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error: ${e.toString()}"), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text("Error: ${e.toString()}"), 
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     } finally {
@@ -149,7 +157,6 @@ class _ProductDetailsState extends State<ProductDetails> {
         }
 
         final product = snapshot.data!.data() as Map<String, dynamic>;
-        // Safer parsing for inventory (handles Strings and Ints)
         final int inventory = int.tryParse(product['inventory']?.toString() ?? '0') ?? 0;
 
         List<dynamic> rawImages = product['images'] ?? [];
@@ -158,7 +165,6 @@ class _ProductDetailsState extends State<ProductDetails> {
         }
         final List<String> imageUrls = rawImages.map((e) => e.toString()).toList();
 
-        // 3D Model Check
         final String? modelUrl = product['modelUrl'] ?? product['sketchfabUrl'];
         final bool has3DModel = modelUrl != null && modelUrl.isNotEmpty;
 
@@ -170,6 +176,13 @@ class _ProductDetailsState extends State<ProductDetails> {
           appBar: AppBar(
             title: const Text("Product Details"),
             centerTitle: true,
+            actions: [
+              if (has3DModel)
+                IconButton(
+                  icon: Icon(_show3D ? Icons.image : Icons.view_in_ar),
+                  onPressed: _isModelCaching ? null : () => setState(() => _show3D = !_show3D),
+                ),
+            ],
           ),
           body: SingleChildScrollView(
             controller: _scrollController,
@@ -204,33 +217,22 @@ class _ProductDetailsState extends State<ProductDetails> {
                                 ))
                           : _buildImageCarousel(imageUrls),
 
-                      // Toggle Button
-                      if (has3DModel)
-                        Positioned(
-                          bottom: 10,
-                          right: 10,
-                          child: FloatingActionButton.small(
-                            backgroundColor: Colors.white,
-                            heroTag: "3dToggle",
-                            child: _isModelCaching 
-                                ? const Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator(strokeWidth: 2)) 
-                                : Icon(_show3D ? Icons.image : Icons.view_in_ar, color: colorScheme.primary),
-                            onPressed: () {
-                              if (_isModelCaching) return; 
-                              setState(() => _show3D = !_show3D);
-                            },
-                          ),
-                        ),
-                        
                       if (_show3D && has3DModel && _cachedModelFile != null)
-                         Positioned(
-                          top: 10, right: 10,
+                        Positioned(
+                          top: 10,
+                          right: 10,
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(4)),
-                            child: const Text("Tap AR icon to place in room", style: TextStyle(color: Colors.white, fontSize: 10)),
-                          )
-                         )
+                            decoration: BoxDecoration(
+                              color: Colors.black54,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text(
+                              "Tap AR icon to place in room",
+                              style: TextStyle(color: Colors.white, fontSize: 10),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -256,7 +258,10 @@ class _ProductDetailsState extends State<ProductDetails> {
                       const SizedBox(height: 10),
                       _buildSummaryRating(product),
                       const SizedBox(height: 20),
-                      Text('Details', style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                      Text(
+                        'Details',
+                        style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                      ),
                       const SizedBox(height: 10),
                       Text(
                         product['Description'] ?? "No description provided.",
@@ -265,10 +270,13 @@ class _ProductDetailsState extends State<ProductDetails> {
                       const SizedBox(height: 30),
                       RepaintBoundary(
                         key: _reviewsKey,
-                        child: Text('Customer Reviews', style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                        child: Text(
+                          'Customer Reviews',
+                          style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                        ),
                       ),
                       const SizedBox(height: 10),
-                      _buildPaginatedReviewList(),
+                      _buildPaginatedReviewList(), // 🔥 FIXED WITH SHIMMER
                       const SizedBox(height: 80),
                     ],
                   ),
@@ -280,7 +288,9 @@ class _ProductDetailsState extends State<ProductDetails> {
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               color: colorScheme.surface,
-              boxShadow: [BoxShadow(color: Colors.black.withAlpha(25), blurRadius: 10, offset: const Offset(0, -4))],
+              boxShadow: [
+                BoxShadow(color: Colors.black.withAlpha(25), blurRadius: 10, offset: const Offset(0, -4))
+              ],
             ),
             child: SizedBox(
               height: 55,
@@ -288,13 +298,25 @@ class _ProductDetailsState extends State<ProductDetails> {
               child: ElevatedButton(
                 onPressed: inventory == 0 || _isLoading ? null : () => _handleAddToCart(product),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: inventory == 0 ? Colors.red : (inventory < 10 ? Colors.amber : colorScheme.primary),
-                  foregroundColor: inventory == 0 || inventory < 10 ? Colors.black : colorScheme.onPrimary,
+                  backgroundColor: inventory == 0
+                      ? Colors.red
+                      : (inventory < 10 ? Colors.amber : colorScheme.primary),
+                  foregroundColor: inventory == 0 || inventory < 10
+                      ? Colors.white
+                      : colorScheme.onPrimary,
                 ),
                 child: _isLoading
-                    ? const CircularProgressIndicator()
-                    : Text(inventory == 0 ? "Out of Stock" : (inventory < 10 ? "Only a few left! Order now!" : "Add to Cart"),
-                        style: const TextStyle(fontWeight: FontWeight.bold)),
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                      )
+                    : Text(
+                        inventory == 0
+                            ? "Out of Stock"
+                            : (inventory < 10 ? "Only ${inventory} left!" : "Add to Cart"),
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
               ),
             ),
           ),
@@ -321,9 +343,10 @@ class _ProductDetailsState extends State<ProductDetails> {
     );
   }
 
-  // --- UPDATED IMAGE CAROUSEL (FIXED SYNTAX) ---
   Widget _buildImageCarousel(List<String> images) {
-    if (images.isEmpty) return const Center(child: Icon(Icons.broken_image, size: 80));
+    if (images.isEmpty) {
+      return const Center(child: Icon(Icons.broken_image, size: 80, color: Colors.grey));
+    }
 
     return Column(
       children: [
@@ -333,9 +356,8 @@ class _ProductDetailsState extends State<ProductDetails> {
               height: double.infinity,
               viewportFraction: 1.0,
               enableInfiniteScroll: images.length > 1,
-              // Fix: Simple onPageChanged callback
               onPageChanged: (index, reason) {
-                 if (mounted) setState(() => _currentImageIndex = index);
+                if (mounted) setState(() => _currentImageIndex = index);
               },
             ),
             items: images.map((url) {
@@ -348,7 +370,10 @@ class _ProductDetailsState extends State<ProductDetails> {
                   highlightColor: Colors.grey[100]!,
                   child: Container(color: Colors.white),
                 ),
-                errorWidget: (context, url, error) => const Icon(Icons.error),
+                errorWidget: (context, url, error) => Container(
+                  color: Colors.grey[200],
+                  child: const Icon(Icons.error, color: Colors.grey),
+                ),
               );
             }).toList(),
           ),
@@ -372,12 +397,33 @@ class _ProductDetailsState extends State<ProductDetails> {
     );
   }
 
+  // 🔥 FIXED: SHIMMER POWERED REVIEWS
   Widget _buildPaginatedReviewList() {
     if (_reviews.isEmpty && !_isLoadingReviews) {
-      return const Center(child: Padding(padding: EdgeInsets.all(20), child: Text("No reviews yet.")));
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(40),
+          child: Column(
+            children: [
+              Icon(Icons.reviews_outlined, size: 64, color: Colors.grey),
+              SizedBox(height: 8),
+              Text(
+                "No reviews yet.",
+                style: TextStyle(color: Colors.grey, fontSize: 16),
+              ),
+              Text(
+                "Be the first to review!",
+                style: TextStyle(color: Colors.grey, fontSize: 14),
+              ),
+            ],
+          ),
+        ),
+      );
     }
+    
     return Column(
       children: [
+        // Existing reviews
         ListView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -387,19 +433,106 @@ class _ProductDetailsState extends State<ProductDetails> {
             return _buildReviewCard(data);
           },
         ),
+        
+        // 🔥 SHIMMER + LOAD MORE (Luxury UX)
         if (_hasMoreReviews)
-          TextButton(
-            onPressed: _fetchReviews,
-            child: _isLoadingReviews ? const CircularProgressIndicator() : const Text("Load More Reviews"),
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              children: [
+                // ✨ Shimmer rows during loading
+                if (_isLoadingReviews)
+                  Column(
+                    children: List.generate(3, (index) => _buildReviewShimmer()),
+                  ),
+                
+                // Load More Button
+                if (!_isLoadingReviews)
+                  TextButton.icon(
+                    onPressed: _fetchReviews,
+                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                    label: const Text("Load More Reviews"),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+              ],
+            ),
           ),
       ],
+    );
+  }
+
+  // ✨ CUSTOM REVIEW SHIMMER ROW
+  Widget _buildReviewShimmer() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Avatar shimmer
+          Shimmer.fromColors(
+            baseColor: Colors.grey[300]!,
+            highlightColor: Colors.grey[100]!,
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          
+          // Review content shimmer
+          Expanded(
+            child: Shimmer.fromColors(
+              baseColor: Colors.grey[300]!,
+              highlightColor: Colors.grey[100]!,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Username + stars
+                  Container(
+                    width: 120,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // Review text lines
+                  Container(
+                    width: double.infinity,
+                    height: 16,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: 200,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildReviewCard(Map<String, dynamic> reviewData) {
     final userId = reviewData['userId'];
     return StreamBuilder<DocumentSnapshot>(
-      // Optimization: Fetch once per user card, don't listen forever if not needed
       stream: FirebaseFirestore.instance.collection('users').doc(userId).snapshots(),
       builder: (context, snapshot) {
         String userImage = "https://firebasestorage.googleapis.com/v0/b/kartsyapp-87532.firebasestorage.app/o/default_profile.png?alt=media&token=d328f93c-400f-4deb-a0e8-014eb2e2b795";
@@ -423,9 +556,11 @@ class _ProductDetailsState extends State<ProductDetails> {
                     ClipOval(
                       child: CachedNetworkImage(
                         imageUrl: userImage,
-                        width: 40, height: 40, fit: BoxFit.cover,
+                        width: 40,
+                        height: 40,
+                        fit: BoxFit.cover,
                         placeholder: (context, url) => const CircleAvatar(backgroundColor: Colors.grey),
-                        errorWidget: (context, url, error) => const Icon(Icons.person),
+                        errorWidget: (context, url, error) => const CircleAvatar(child: Icon(Icons.person)),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -438,8 +573,8 @@ class _ProductDetailsState extends State<ProductDetails> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
-                Text(reviewData['reviewText'] ?? ''),
+                const SizedBox(height: 12),
+                Text(reviewData['reviewText'] ?? '', style: const TextStyle(height: 1.4)),
               ],
             ),
           ),

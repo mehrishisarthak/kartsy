@@ -8,11 +8,10 @@ import 'package:ecommerce_shop/services/cart_provider.dart';
 import 'package:ecommerce_shop/services/shimmer/home_shimmer.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shimmer/shimmer.dart';
 
 class HomeScreen extends StatefulWidget {
-  // We can force this to be non-nullable because RootWrapper guarantees it.
-  final String userId; 
-
+  final String userId;
   const HomeScreen({super.key, required this.userId});
 
   @override
@@ -24,13 +23,12 @@ class _HomeScreenState extends State<HomeScreen> {
   String userImageUrl = '';
   bool _isPageLoading = true; 
 
-  // --- PAGINATION VARIABLES ---
+  // PAGINATION VARIABLES
   final ScrollController _horizontalScrollController = ScrollController();
   final List<DocumentSnapshot> _products = [];
   bool _isLoadingMoreProducts = false;
   bool _hasMoreProducts = true;
   DocumentSnapshot? _lastProductDoc;
-  
   static const int _productsPerBatch = 10; 
 
   static const List<Map<String, String>> categories = [
@@ -46,7 +44,6 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _initializeData();
 
-    // Setup listener for horizontal scrolling (Lazy Loading)
     _horizontalScrollController.addListener(() {
       if (_horizontalScrollController.position.pixels >=
           _horizontalScrollController.position.maxScrollExtent - 100) {
@@ -69,18 +66,15 @@ class _HomeScreenState extends State<HomeScreen> {
     ]);
 
     if (mounted) {
-      setState(() {
-        _isPageLoading = false;
-      });
+      setState(() => _isPageLoading = false);
     }
   }
 
-  // 1. UPDATED: Fetch Cart Data using widget.userId
   Future<void> _loadCartData() async {
     try {
       final cartSnap = await FirebaseFirestore.instance
           .collection('users')
-          .doc(widget.userId) // Use widget.userId directly
+          .doc(widget.userId)
           .collection('cart')
           .get();
 
@@ -107,7 +101,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // 2. FIXED: Fetch User Data strictly from Firestore (No SharedPreferences)
   Future<void> _loadUserData() async {
     try {
       final userDoc = await FirebaseFirestore.instance
@@ -117,10 +110,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (userDoc.exists && mounted) {
         setState(() {
-          // Robustly handle missing fields
           final data = userDoc.data();
           String fullName = data?['Name'] ?? 'User';
-          userName = fullName.split(' ')[0]; // Get First Name
+          userName = fullName.split(' ')[0];
           userImageUrl = data?['Image'] ?? '';
         });
       }
@@ -153,9 +145,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (querySnapshot.docs.isNotEmpty) {
         _lastProductDoc = querySnapshot.docs.last;
         if (mounted) {
-          setState(() {
-            _products.addAll(querySnapshot.docs);
-          });
+          setState(() => _products.addAll(querySnapshot.docs));
         }
       }
     } catch (e) {
@@ -190,6 +180,139 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // 🔥 SHIMMER PRODUCT CARD (NEW)
+  Widget _buildProductShimmer() {
+    return Container(
+      width: 160,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Shimmer.fromColors(
+        baseColor: Colors.grey[300]!,
+        highlightColor: Colors.grey[100]!,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Image shimmer
+            Container(
+              height: 110,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            const SizedBox(height: 10),
+            // Name shimmer
+            Container(
+              width: 100,
+              height: 12,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            const SizedBox(height: 4),
+            // Rating shimmer
+            Container(
+              width: 60,
+              height: 10,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            const SizedBox(height: 4),
+            // Price shimmer
+            Container(
+              width: 80,
+              height: 14,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProductCard(Map<String, dynamic> productData) {
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ProductDetails(productId: productData['id']),
+        ),
+      ),
+      child: Container(
+        width: 160,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(15),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 5),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  color: Colors.grey[100],
+                  child: Image.network(
+                    productData['Image'] ?? '',
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const Icon(
+                      Icons.broken_image,
+                      size: 50,
+                      color: Colors.grey,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              productData['Name'] ?? 'No Name',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 4),
+            _buildRatingRow(productData),
+            const SizedBox(height: 4),
+            Text(
+              "₹${productData['Price']}",
+              style: const TextStyle(
+                color: Colors.black87,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -206,23 +329,28 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // --- Header Section ---
+                      // Header Section
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Hey, $userName!',
-                                  style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
-                              Text('Good day!',
-                                  style: textTheme.titleMedium?.copyWith(color: Colors.grey[600])),
+                              Text(
+                                'Hey, $userName!',
+                                style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                              ),
+                              Text(
+                                'Good day!',
+                                style: textTheme.titleMedium?.copyWith(color: Colors.grey[600]),
+                              ),
                             ],
                           ),
                           GestureDetector(
-                            onTap: () {
-                              Navigator.push(context, MaterialPageRoute(builder: (_) => ProfilePage(userId: widget.userId)));
-                            },
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => ProfilePage(userId: widget.userId)),
+                            ),
                             child: Container(
                               height: 50,
                               width: 50,
@@ -248,19 +376,22 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 20.0),
                       
-                      Text('What are you looking for?',
-                          style: textTheme.titleMedium?.copyWith(color: Colors.grey[600])),
+                      Text(
+                        'What are you looking for?',
+                        style: textTheme.titleMedium?.copyWith(color: Colors.grey[600]),
+                      ),
                       const SizedBox(height: 10),
                       
-                      // --- SEARCH BAR ---
+                      // Search Bar
                       GestureDetector(
-                        onTap: () {
-                          Navigator.push(context, MaterialPageRoute(builder: (_) => const SearchPage()));
-                        },
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const SearchPage()),
+                        ),
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
                           decoration: BoxDecoration(
-                            color: Colors.grey[100], 
+                            color: Colors.grey[100],
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(color: Colors.grey.shade300),
                           ),
@@ -278,8 +409,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 30.0),
 
-                      // --- Categories Section ---
-                      Text('Categories', style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                      // Categories Section
+                      Text(
+                        'Categories',
+                        style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                      ),
                       const SizedBox(height: 20.0),
                       SizedBox(
                         height: 100,
@@ -291,14 +425,12 @@ class _HomeScreenState extends State<HomeScreen> {
                             final categoryItem = categories[index];
                             final isAll = categoryItem['name'] == 'All';
                             return GestureDetector(
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => CategoryProducts(category: categoryItem['name']!),
-                                  ),
-                                );
-                              },
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => CategoryProducts(category: categoryItem['name']!),
+                                ),
+                              ),
                               child: Container(
                                 width: 100,
                                 decoration: BoxDecoration(
@@ -308,17 +440,21 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                                 child: isAll
                                     ? Center(
-                                        child: Text('All',
-                                            style: textTheme.titleMedium?.copyWith(
-                                                color: colorScheme.onPrimary, fontWeight: FontWeight.bold)))
+                                        child: Text(
+                                          'All',
+                                          style: textTheme.titleMedium?.copyWith(
+                                            color: colorScheme.onPrimary,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      )
                                     : ClipRRect(
                                         borderRadius: BorderRadius.circular(8),
                                         child: Padding(
                                           padding: const EdgeInsets.all(8.0),
                                           child: Image.asset(
-                                            categoryItem['image']!, 
+                                            categoryItem['image']!,
                                             fit: BoxFit.contain,
-                                            // Handle missing assets gracefully
                                             errorBuilder: (c, e, s) => const Icon(Icons.category),
                                           ),
                                         ),
@@ -330,101 +466,60 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 30.0),
 
-                      // --- Featured Products ---
+                      // Featured Products
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text('Featured Products',
-                              style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                          Text(
+                            'Featured Products',
+                            style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                          ),
                           GestureDetector(
-                            onTap: () {
-                              Navigator.push(context, MaterialPageRoute(builder: (context) => const DiscoverPage()));
-                            },
-                            child: Text('See All',
-                                style: textTheme.titleSmall?.copyWith(
-                                    color: colorScheme.primary, fontWeight: FontWeight.bold)),
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const DiscoverPage()),
+                            ),
+                            child: Text(
+                              'See All',
+                              style: textTheme.titleSmall?.copyWith(
+                                color: colorScheme.primary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 20.0),
 
+                      // 🔥 SHIMMER POWERED PRODUCTS LIST
                       SizedBox(
-                        height: 250, 
+                        height: 250,
                         child: _products.isEmpty && !_isPageLoading
-                            ? const Center(child: Text("No products found."))
+                            ? const Center(
+                                child: Padding(
+                                  padding: EdgeInsets.all(40),
+                                  child: Column(
+                                    children: [
+                                      Icon(Icons.inventory_2_outlined, size: 64, color: Colors.grey),
+                                      SizedBox(height: 8),
+                                      Text("No products found.", style: TextStyle(color: Colors.grey, fontSize: 16)),
+                                    ],
+                                  ),
+                                ),
+                              )
                             : ListView.separated(
                                 controller: _horizontalScrollController,
                                 scrollDirection: Axis.horizontal,
-                                itemCount: _products.length + (_hasMoreProducts ? 1 : 0),
+                                itemCount: _products.length + (_isLoadingMoreProducts ? 3 : (_hasMoreProducts ? 1 : 0)),
                                 separatorBuilder: (context, index) => const SizedBox(width: 15),
                                 itemBuilder: (context, index) {
-                                  if (index == _products.length) {
-                                    return const Center(
-                                      child: Padding(
-                                        padding: EdgeInsets.all(20.0),
-                                        child: CircularProgressIndicator(),
-                                      ),
-                                    );
+                                  // 🔥 SHIMMER WHEN LOADING
+                                  if (index >= _products.length) {
+                                    return _buildProductShimmer();
                                   }
 
                                   final productData = _products[index].data() as Map<String, dynamic>;
-
-                                  return GestureDetector(
-                                    onTap: () {
-                                      Navigator.push(context, MaterialPageRoute(
-                                          builder: (context) => ProductDetails(productId: productData['id'])));
-                                    },
-                                    child: Container(
-                                      width: 160,
-                                      padding: const EdgeInsets.all(12),
-                                      decoration: BoxDecoration(
-                                        color: colorScheme.surface,
-                                        borderRadius: BorderRadius.circular(15),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.black.withOpacity(0.05),
-                                            blurRadius: 10,
-                                            offset: const Offset(0, 5),
-                                          ),
-                                        ],
-                                      ),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Expanded(
-                                            child: ClipRRect(
-                                              borderRadius: BorderRadius.circular(10),
-                                              child: Container(
-                                                color: Colors.grey[100],
-                                                child: Image.network(
-                                                  productData['Image'] ?? '',
-                                                  width: double.infinity,
-                                                  fit: BoxFit.cover,
-                                                  errorBuilder: (_, __, ___) =>
-                                                      const Icon(Icons.broken_image, size: 50, color: Colors.grey),
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const SizedBox(height: 10),
-                                          Text(
-                                            productData['Name'] ?? 'No Name',
-                                            style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                          const SizedBox(height: 4),
-                                          _buildRatingRow(productData),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            "₹${productData['Price']}",
-                                            style: textTheme.titleSmall?.copyWith(
-                                                color: colorScheme.primary, fontWeight: FontWeight.bold),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  );
+                                  return _buildProductCard(productData);
                                 },
                               ),
                       ),

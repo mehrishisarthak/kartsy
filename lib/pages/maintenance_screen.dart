@@ -75,26 +75,6 @@ class MaintenanceScreen extends StatelessWidget {
               ),
 
               const Spacer(flex: 3),
-
-              // 🏠 HOME ACTION (No Firestore read)
-              SizedBox(
-                width: double.infinity,
-                height: 55,
-                child: OutlinedButton.icon(
-                  onPressed: () => Navigator.of(context).pop(),
-                  style: OutlinedButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  icon: const Icon(Icons.home_rounded),
-                  label: const Text(
-                    "Go to Home",
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ),
-              const Spacer(flex: 1),
             ],
           ),
         ),

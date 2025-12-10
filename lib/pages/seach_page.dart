@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ecommerce_shop/pages/product_details.dart';
 import 'package:flutter/material.dart';
+import 'package:shimmer/shimmer.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
@@ -18,15 +19,20 @@ class _SearchPageState extends State<SearchPage> {
   List<DocumentSnapshot> _searchResults = [];
   List<DocumentSnapshot> _autocompleteSuggestions = [];
   
-  // State Variables
-  bool _isSearching = false; // Is the search logic running?
-  bool _showAutocomplete = false; // Should we show the little box?
+  // Pagination for Search Results
+  final ScrollController _scrollController = ScrollController();
+  bool _isLoadingMore = false;
+  bool _hasMoreResults = true;
+  DocumentSnapshot? _lastSearchDoc;
+  static const int _searchLimit = 20;
   
-  // Filter Variables
-  String _selectedSort = 'Relevance'; // Default
+  // State Variables
+  bool _isSearching = false;
+  bool _showAutocomplete = false;
+  String _selectedSort = 'Relevance';
   final List<String> _sortOptions = ['Relevance', 'Price: Low to High', 'Price: High to Low'];
 
-  Timer? _debounce; // To wait for user to stop typing before querying
+  Timer? _debounce;
 
   @override
   void initState() {
@@ -43,15 +49,14 @@ class _SearchPageState extends State<SearchPage> {
   void dispose() {
     _searchController.dispose();
     _searchFocusNode.dispose();
+    _scrollController.dispose();
     _debounce?.cancel();
     super.dispose();
   }
 
-  // --- 1. AUTOCOMPLETE LOGIC ---
   void _onSearchChanged() {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
     
-    // Wait 500ms after user stops typing to save database reads
     _debounce = Timer(const Duration(milliseconds: 500), () {
       if (_searchController.text.trim().isNotEmpty) {
         _fetchAutocomplete(_searchController.text.trim());
@@ -65,22 +70,14 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Future<void> _fetchAutocomplete(String query) async {
-    // Firestore is case-sensitive. This logic assumes product names are stored 
-    // exactly how the user types them (e.g., "Watch"). 
-    // For production, store a lowercase 'searchKey' in your database.
-    
-    // Capitalize first letter to match database format (e.g., "watch" -> "Watch")
-    String formattedQuery = query; 
-    if (query.isNotEmpty) {
-       formattedQuery = query[0].toUpperCase() + query.substring(1);
-    }
+    String formattedQuery = query.isNotEmpty ? query[0].toUpperCase() + query.substring(1) : query;
 
     QuerySnapshot snapshot = await FirebaseFirestore.instance
         .collection('products')
         .orderBy('Name')
         .startAt([formattedQuery])
-        .endAt(['$formattedQuery\uf8ff']) // \uf8ff is a high unicode character
-        .limit(5) // Only fetch top 5 for the small box
+        .endAt(['$formattedQuery\uf8ff'])
+        .limit(5)
         .get();
 
     if (mounted) {
@@ -91,63 +88,182 @@ class _SearchPageState extends State<SearchPage> {
     }
   }
 
-  // --- 2. FULL SEARCH LOGIC ---
-  Future<void> _performSearch(String query) async {
-    setState(() {
-      _showAutocomplete = false;
-      _isSearching = true;
-      _searchFocusNode.unfocus(); // Hide keyboard
-    });
-
-    String formattedQuery = query;
-    if (query.isNotEmpty) {
-      formattedQuery = query[0].toUpperCase() + query.substring(1);
+  // 🔥 PAGINATED SEARCH (NEW)
+  Future<void> _performSearch(String query, {bool loadMore = false}) async {
+    if (!loadMore) {
+      setState(() {
+        _searchResults.clear();
+        _lastSearchDoc = null;
+        _hasMoreResults = true;
+        _showAutocomplete = false;
+        _isSearching = true;
+        _searchFocusNode.unfocus();
+      });
+    } else {
+      setState(() => _isLoadingMore = true);
     }
 
+    String formattedQuery = query.isNotEmpty ? query[0].toUpperCase() + query.substring(1) : query;
+
     try {
-      QuerySnapshot snapshot = await FirebaseFirestore.instance
+      Query queryRef = FirebaseFirestore.instance
           .collection('products')
           .orderBy('Name')
           .startAt([formattedQuery])
           .endAt(['$formattedQuery\uf8ff'])
-          .get();
+          .limit(_searchLimit);
 
-      setState(() {
-        _searchResults = snapshot.docs;
-      });
+      if (loadMore && _lastSearchDoc != null) {
+        queryRef = queryRef.startAfterDocument(_lastSearchDoc!);
+      }
+
+      QuerySnapshot snapshot = await queryRef.get();
+
+      if (snapshot.docs.length < _searchLimit) {
+        _hasMoreResults = false;
+      }
+
+      if (snapshot.docs.isNotEmpty) {
+        _lastSearchDoc = snapshot.docs.last;
+        setState(() {
+          _searchResults.addAll(snapshot.docs);
+        });
+      }
       
-      // Apply existing sort preference immediately
       _applySort();
-
     } catch (e) {
       print("Search Error: $e");
     } finally {
-      setState(() => _isSearching = false);
+      setState(() {
+        _isSearching = false;
+        _isLoadingMore = false;
+      });
     }
   }
 
-  // --- 3. FILTER / SORT LOGIC (Client Side) ---
   void _applySort() {
     if (_searchResults.isEmpty) return;
 
     setState(() {
       if (_selectedSort == 'Price: Low to High') {
         _searchResults.sort((a, b) {
-           double priceA = (a['Price'] as num).toDouble();
-           double priceB = (b['Price'] as num).toDouble();
-           return priceA.compareTo(priceB);
+          double priceA = (a['Price'] as num).toDouble();
+          double priceB = (b['Price'] as num).toDouble();
+          return priceA.compareTo(priceB);
         });
       } else if (_selectedSort == 'Price: High to Low') {
         _searchResults.sort((a, b) {
-           double priceA = (a['Price'] as num).toDouble();
-           double priceB = (b['Price'] as num).toDouble();
-           return priceB.compareTo(priceA);
+          double priceA = (a['Price'] as num).toDouble();
+          double priceB = (b['Price'] as num).toDouble();
+          return priceB.compareTo(priceA);
         });
-      } else {
-        // Relevance (Default Firestore Order - Alphabetical usually)
-        // We could re-query, or just accept the name order.
       }
     });
+  }
+
+  // 🔥 SEARCH RESULT SHIMMER (NEW)
+  Widget _buildSearchShimmer() {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Shimmer.fromColors(
+          baseColor: Colors.grey[300]!,
+          highlightColor: Colors.grey[100]!,
+          child: Row(
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 200,
+                      height: 16,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: 120,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResultCard(Map<String, dynamic> data) {
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => ProductDetails(productId: data['id'])),
+      ),
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 12),
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.network(
+                  data['Image'] ?? '',
+                  width: 60,
+                  height: 60,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_,__,___) => Container(
+                    width: 60,
+                    height: 60,
+                    color: Colors.grey[200],
+                    child: const Icon(Icons.image, size: 30),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(data['Name'] ?? 'No Name', 
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    const SizedBox(height: 4),
+                    Text("₹${data['Price']}", 
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.primary, 
+                          fontWeight: FontWeight.bold
+                        )),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -159,7 +275,7 @@ class _SearchPageState extends State<SearchPage> {
         title: TextField(
           controller: _searchController,
           focusNode: _searchFocusNode,
-          autofocus: true, // Open keyboard immediately
+          autofocus: true,
           textInputAction: TextInputAction.search,
           onSubmitted: _performSearch,
           decoration: InputDecoration(
@@ -184,10 +300,10 @@ class _SearchPageState extends State<SearchPage> {
       ),
       body: Stack(
         children: [
-          // LAYER 1: The Results & Filters
+          // Results & Filters
           Column(
             children: [
-              // Filters Bar (Only show if we have results)
+              // Filters Bar
               if (_searchResults.isNotEmpty)
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
@@ -222,9 +338,15 @@ class _SearchPageState extends State<SearchPage> {
                     : _searchResults.isEmpty && _searchController.text.isNotEmpty && !_showAutocomplete
                         ? const Center(child: Text("No products found."))
                         : ListView.builder(
+                            controller: _scrollController,
                             padding: const EdgeInsets.all(16),
-                            itemCount: _searchResults.length,
+                            itemCount: _searchResults.length + (_isLoadingMore ? 3 : (_hasMoreResults ? 1 : 0)),
                             itemBuilder: (context, index) {
+                              // 🔥 SHIMMER WHEN LOADING MORE
+                              if (index >= _searchResults.length) {
+                                return _buildSearchShimmer();
+                              }
+
                               final data = _searchResults[index].data() as Map<String, dynamic>;
                               return _buildResultCard(data);
                             },
@@ -233,7 +355,7 @@ class _SearchPageState extends State<SearchPage> {
             ],
           ),
 
-          // LAYER 2: The Autocomplete Overlay (Shows on top)
+          // Autocomplete Overlay
           if (_showAutocomplete && _autocompleteSuggestions.isNotEmpty)
             Positioned(
               top: 0,
@@ -244,16 +366,15 @@ class _SearchPageState extends State<SearchPage> {
                 color: colorScheme.surface,
                 child: ListView.builder(
                   shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(), // Just size to content
+                  physics: const NeverScrollableScrollPhysics(),
                   itemCount: _autocompleteSuggestions.length,
                   itemBuilder: (context, index) {
                     final data = _autocompleteSuggestions[index].data() as Map<String, dynamic>;
                     return ListTile(
-                      leading: const Icon(Icons.history), // Or image
+                      leading: const Icon(Icons.history),
                       title: Text(data['Name'] ?? ''),
                       trailing: const Icon(Icons.north_west, size: 16),
                       onTap: () {
-                        // User tapped a suggestion -> Fill text and search
                         _searchController.text = data['Name'];
                         _performSearch(data['Name']);
                       },
@@ -263,49 +384,6 @@ class _SearchPageState extends State<SearchPage> {
               ),
             ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildResultCard(Map<String, dynamic> data) {
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => ProductDetails(productId: data['id'])));
-      },
-      child: Card(
-        margin: const EdgeInsets.only(bottom: 12),
-        elevation: 2,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: Padding(
-          padding: const EdgeInsets.all(12.0),
-          child: Row(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Image.network(
-                  data['Image'] ?? '',
-                  width: 60,
-                  height: 60,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_,__,___) => const Icon(Icons.image, size: 40),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(data['Name'] ?? 'No Name', 
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    const SizedBox(height: 4),
-                    Text("₹${data['Price']}", 
-                        style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
