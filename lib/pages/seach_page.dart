@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:cached_network_image/cached_network_image.dart'; // ✅ Added for performance
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ecommerce_shop/pages/product_details.dart';
 import 'package:flutter/material.dart';
@@ -43,6 +44,15 @@ class _SearchPageState extends State<SearchPage> {
         _showAutocomplete = _searchFocusNode.hasFocus && _searchController.text.isNotEmpty;
       });
     });
+    
+    _scrollController.addListener(() {
+      if (_scrollController.position.pixels >= 
+          _scrollController.position.maxScrollExtent - 200) {
+        if (!_isLoadingMore && _hasMoreResults && _searchResults.isNotEmpty) {
+           _performSearch(_searchController.text, loadMore: true);
+        }
+      }
+    });
   }
 
   @override
@@ -61,15 +71,18 @@ class _SearchPageState extends State<SearchPage> {
       if (_searchController.text.trim().isNotEmpty) {
         _fetchAutocomplete(_searchController.text.trim());
       } else {
-        setState(() {
-          _autocompleteSuggestions = [];
-          _showAutocomplete = false;
-        });
+        if(mounted) {
+          setState(() {
+            _autocompleteSuggestions = [];
+            _showAutocomplete = false;
+          });
+        }
       }
     });
   }
 
   Future<void> _fetchAutocomplete(String query) async {
+    // Note: Firestore text search is case-sensitive by default.
     String formattedQuery = query.isNotEmpty ? query[0].toUpperCase() + query.substring(1) : query;
 
     QuerySnapshot snapshot = await FirebaseFirestore.instance
@@ -88,8 +101,9 @@ class _SearchPageState extends State<SearchPage> {
     }
   }
 
-  // 🔥 PAGINATED SEARCH (NEW)
   Future<void> _performSearch(String query, {bool loadMore = false}) async {
+    if (query.isEmpty) return;
+
     if (!loadMore) {
       setState(() {
         _searchResults.clear();
@@ -132,12 +146,14 @@ class _SearchPageState extends State<SearchPage> {
       
       _applySort();
     } catch (e) {
-      print("Search Error: $e");
+      debugPrint("Search Error: $e");
     } finally {
-      setState(() {
-        _isSearching = false;
-        _isLoadingMore = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isSearching = false;
+          _isLoadingMore = false;
+        });
+      }
     }
   }
 
@@ -147,21 +163,22 @@ class _SearchPageState extends State<SearchPage> {
     setState(() {
       if (_selectedSort == 'Price: Low to High') {
         _searchResults.sort((a, b) {
-          double priceA = (a['Price'] as num).toDouble();
-          double priceB = (b['Price'] as num).toDouble();
+          double priceA = ((a.data() as Map)['Price'] as num).toDouble();
+          double priceB = ((b.data() as Map)['Price'] as num).toDouble();
           return priceA.compareTo(priceB);
         });
       } else if (_selectedSort == 'Price: High to Low') {
         _searchResults.sort((a, b) {
-          double priceA = (a['Price'] as num).toDouble();
-          double priceB = (b['Price'] as num).toDouble();
+          double priceA = ((a.data() as Map)['Price'] as num).toDouble();
+          double priceB = ((b.data() as Map)['Price'] as num).toDouble();
           return priceB.compareTo(priceA);
         });
       }
     });
   }
 
-  // 🔥 SEARCH RESULT SHIMMER (NEW)
+  // --- WIDGETS ---
+
   Widget _buildSearchShimmer() {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -175,35 +192,17 @@ class _SearchPageState extends State<SearchPage> {
           child: Row(
             children: [
               Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                ),
+                width: 60, height: 60,
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      width: 200,
-                      height: 16,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
+                    Container(width: 200, height: 16, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4))),
                     const SizedBox(height: 8),
-                    Container(
-                      width: 120,
-                      height: 14,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
+                    Container(width: 120, height: 14, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4))),
                   ],
                 ),
               ),
@@ -230,16 +229,20 @@ class _SearchPageState extends State<SearchPage> {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                child: Image.network(
-                  data['Image'] ?? '',
+                // ✅ OPTIMIZED: Cached Image
+                child: CachedNetworkImage(
+                  imageUrl: data['Image'] ?? '',
                   width: 60,
                   height: 60,
                   fit: BoxFit.cover,
-                  errorBuilder: (_,__,___) => Container(
-                    width: 60,
-                    height: 60,
+                  placeholder: (context, url) => Container(
+                    width: 60, height: 60,
                     color: Colors.grey[200],
-                    child: const Icon(Icons.image, size: 30),
+                  ),
+                  errorWidget: (_,__,___) => Container(
+                    width: 60, height: 60,
+                    color: Colors.grey[200],
+                    child: const Icon(Icons.image, size: 30, color: Colors.grey),
                   ),
                 ),
               ),
@@ -248,14 +251,20 @@ class _SearchPageState extends State<SearchPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(data['Name'] ?? 'No Name', 
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    Text(
+                      data['Name'] ?? 'No Name', 
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     const SizedBox(height: 4),
-                    Text("₹${data['Price']}", 
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.primary, 
-                          fontWeight: FontWeight.bold
-                        )),
+                    Text(
+                      "₹${data['Price']}", 
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary, 
+                        fontWeight: FontWeight.bold
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -277,7 +286,7 @@ class _SearchPageState extends State<SearchPage> {
           focusNode: _searchFocusNode,
           autofocus: true,
           textInputAction: TextInputAction.search,
-          onSubmitted: _performSearch,
+          onSubmitted: (val) => _performSearch(val),
           decoration: InputDecoration(
             hintText: "Search headphones, laptops...",
             border: InputBorder.none,
@@ -293,6 +302,7 @@ class _SearchPageState extends State<SearchPage> {
               setState(() {
                 _searchResults = [];
                 _showAutocomplete = false;
+                _isSearching = false;
               });
             },
           )
@@ -333,16 +343,15 @@ class _SearchPageState extends State<SearchPage> {
               
               // Results List
               Expanded(
-                child: _isSearching
+                child: _isSearching && _searchResults.isEmpty
                     ? const Center(child: CircularProgressIndicator())
-                    : _searchResults.isEmpty && _searchController.text.isNotEmpty && !_showAutocomplete
+                    : _searchResults.isEmpty && _searchController.text.isNotEmpty && !_showAutocomplete && !_isSearching
                         ? const Center(child: Text("No products found."))
                         : ListView.builder(
                             controller: _scrollController,
                             padding: const EdgeInsets.all(16),
-                            itemCount: _searchResults.length + (_isLoadingMore ? 3 : (_hasMoreResults ? 1 : 0)),
+                            itemCount: _searchResults.length + (_isLoadingMore ? 3 : 0),
                             itemBuilder: (context, index) {
-                              // 🔥 SHIMMER WHEN LOADING MORE
                               if (index >= _searchResults.length) {
                                 return _buildSearchShimmer();
                               }
@@ -357,29 +366,40 @@ class _SearchPageState extends State<SearchPage> {
 
           // Autocomplete Overlay
           if (_showAutocomplete && _autocompleteSuggestions.isNotEmpty)
-            Positioned(
+            Positioned.fill(
               top: 0,
-              left: 0,
-              right: 0,
               child: Material(
-                elevation: 4,
-                color: colorScheme.surface,
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _autocompleteSuggestions.length,
-                  itemBuilder: (context, index) {
-                    final data = _autocompleteSuggestions[index].data() as Map<String, dynamic>;
-                    return ListTile(
-                      leading: const Icon(Icons.history),
-                      title: Text(data['Name'] ?? ''),
-                      trailing: const Icon(Icons.north_west, size: 16),
-                      onTap: () {
-                        _searchController.text = data['Name'];
-                        _performSearch(data['Name']);
-                      },
-                    );
-                  },
+                color: Colors.black54, // Dim background
+                child: Column(
+                  children: [
+                    Container(
+                      color: colorScheme.surface,
+                      constraints: const BoxConstraints(maxHeight: 300),
+                      child: ListView.builder(
+                        padding: EdgeInsets.zero,
+                        shrinkWrap: true,
+                        itemCount: _autocompleteSuggestions.length,
+                        itemBuilder: (context, index) {
+                          final data = _autocompleteSuggestions[index].data() as Map<String, dynamic>;
+                          return ListTile(
+                            leading: const Icon(Icons.history),
+                            title: Text(data['Name'] ?? ''),
+                            trailing: const Icon(Icons.north_west, size: 16),
+                            onTap: () {
+                              _searchController.text = data['Name'];
+                              _performSearch(data['Name']);
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => setState(() => _showAutocomplete = false),
+                        child: Container(color: Colors.transparent),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),

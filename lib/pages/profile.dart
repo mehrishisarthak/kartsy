@@ -1,6 +1,7 @@
 import 'dart:io';
+import 'package:cached_network_image/cached_network_image.dart'; // ✅ Added for performance
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:ecommerce_shop/pages/order_screen.dart'; 
+import 'package:ecommerce_shop/pages/order_screen.dart';
 import 'package:ecommerce_shop/pages/settings.dart';
 import 'package:ecommerce_shop/services/shared_preferences.dart';
 import 'package:ecommerce_shop/services/shimmer/profile_shimmer.dart';
@@ -11,6 +12,46 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 
+// ✅ Best Practice: Move static data outside the widget or to a separate constants.dart file
+const Map<String, List<String>> kIndianStatesAndCities = {
+  'Andaman and Nicobar Islands': ['Port Blair', 'Garacharma', 'Bambooflat'],
+  'Andhra Pradesh': ['Visakhapatnam', 'Vijayawada', 'Guntur', 'Tirupati', 'Nellore', 'Kurnool', 'Rajahmundry', 'Kakinada', 'Anantapur', 'Eluru', 'Kadapa', 'Chittoor', 'Srikakulam'],
+  'Arunachal Pradesh': ['Itanagar', 'Naharlagun', 'Tawang', 'Ziro', 'Bomdila', 'Pasighat'],
+  'Assam': ['Guwahati', 'Dibrugarh', 'Silchar', 'Jorhat', 'Tezpur', 'Nagaon', 'Tinsukia', 'Dispur'],
+  'Bihar': ['Patna', 'Gaya', 'Bhagalpur', 'Muzaffarpur', 'Darbhanga', 'Purnia', 'Arrah', 'Begusarai'],
+  'Chandigarh': ['Chandigarh'],
+  'Chhattisgarh': ['Raipur', 'Bhilai', 'Bilaspur', 'Korba', 'Durg', 'Rajnandgaon', 'Jagdalpur'],
+  'Dadra and Nagar Haveli and Daman and Diu': ['Daman', 'Diu', 'Silvassa', 'Amli'],
+  'Delhi': ['New Delhi', 'Delhi', 'Noida', 'Gurugram', 'Faridabad', 'Ghaziabad'],
+  'Goa': ['Panaji', 'Margao', 'Vasco da Gama', 'Mapusa', 'Ponda'],
+  'Gujarat': ['Ahmedabad', 'Surat', 'Vadodara', 'Rajkot', 'Gandhinagar', 'Bhavnagar', 'Jamnagar', 'Junagadh'],
+  'Haryana': ['Faridabad', 'Gurugram', 'Panipat', 'Ambala', 'Hisar', 'Rohtak', 'Karnal', 'Sonipat'],
+  'Himachal Pradesh': ['Shimla', 'Manali', 'Dharamshala', 'Kullu', 'Solan', 'Mandi', 'Palampur'],
+  'Jammu and Kashmir': ['Srinagar', 'Jammu', 'Anantnag', 'Baramulla', 'Udhampur', 'Kathua', 'Sopore'],
+  'Jharkhand': ['Ranchi', 'Jamshedpur', 'Dhanbad', 'Bokaro Steel City', 'Deoghar', 'Hazaribagh'],
+  'Karnataka': ['Bengaluru', 'Mysuru', 'Hubli-Dharwad', 'Mangaluru', 'Belagavi', 'Ballari', 'Shivamogga', 'Udupi'],
+  'Kerala': ['Thiruvananthapuram', 'Kochi', 'Kozhikode', 'Thrissur', 'Alappala', 'Kollam', 'Kannur', 'Palakkad'],
+  'Ladakh': ['Leh', 'Kargil'],
+  'Lakshadweep': ['Kavaratti', 'Agatti', 'Minicoy', 'Andrott'],
+  'Madhya Pradesh': ['Indore', 'Bhopal', 'Jabalpur', 'Gwalior', 'Ujjain', 'Sagar', 'Rewa', 'Satna'],
+  'Maharashtra': ['Mumbai', 'Pune', 'Nagpur', 'Nashik', 'Aurangabad', 'Thane', 'Solapur', 'Kolhapur'],
+  'Manipur': ['Imphal', 'Bishnupur', 'Thoubal', 'Churachandpur'],
+  'Meghalaya': ['Shillong', 'Cherrapunji', 'Tura', 'Jowai'],
+  'Mizoram': ['Aizawl', 'Lunglei', 'Champhai'],
+  'Nagaland': ['Kohima', 'Dimapur', 'Mokokchung', 'Wokha'],
+  'Odisha': ['Bhubaneswar', 'Cuttack', 'Rourkela', 'Puri', 'Sambalpur', 'Berhampur', 'Balasore'],
+  'Puducherry': ['Puducherry', 'Karaikal', 'Mahe', 'Yanam'],
+  'Punjab': ['Ludhiana', 'Amritsar', 'Jalandhar', 'Patiala', 'Bathinda', 'Mohali', 'Hoshiarpur'],
+  'Rajasthan': ['Jaipur', 'Jodhpur', 'Udaipur', 'Kota', 'Ajmer', 'Bikaner', 'Alwar', 'Bhilwara'],
+  'Sikkim': ['Gangtok', 'Pelling', 'Lachung', 'Namchi'],
+  'Tamil Nadu': ['Chennai', 'Coimbatore', 'Madurai', 'Tiruchirappalli', 'Salem', 'Tirunelveli', 'Erode', 'Vellore'],
+  'Telangana': ['Hyderabad', 'Warangal', 'Nizamabad', 'Karimnagar', 'Ramagundam', 'Khammam', 'Mahbubnagar'],
+  'Tripura': ['Agartala', 'Udaipur', 'Dharmanagar', 'Kailasahar'],
+  'Uttar Pradesh': ['Lucknow', 'Kanpur', 'Ghaziabad', 'Agra', 'Varanasi', 'Meerut', 'Prayagraj', 'Bareilly', 'Aligarh', 'Moradabad'],
+  'Uttarakhand': ['Dehradun', 'Haridwar', 'Roorkee', 'Nainital', 'Rishikesh', 'Haldwani', 'Kashipur'],
+  'West Bengal': ['Kolkata', 'Asansol', 'Siliguri', 'Durgapur', 'Howrah', 'Darjeeling', 'Kharagpur', 'Haldia'],
+};
+
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key, required this.userId});
   final String? userId;
@@ -20,55 +61,14 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  // Indian states and cities data
-  static const Map<String, List<String>> indianStatesAndCities = {
-    'Andaman and Nicobar Islands': ['Port Blair', 'Garacharma', 'Bambooflat'],
-    'Andhra Pradesh': ['Visakhapatnam', 'Vijayawada', 'Guntur', 'Tirupati', 'Nellore', 'Kurnool', 'Rajahmundry', 'Kakinada', 'Anantapur', 'Eluru', 'Kadapa', 'Chittoor', 'Srikakulam'],
-    'Arunachal Pradesh': ['Itanagar', 'Naharlagun', 'Tawang', 'Ziro', 'Bomdila', 'Pasighat'],
-    'Assam': ['Guwahati', 'Dibrugarh', 'Silchar', 'Jorhat', 'Tezpur', 'Nagaon', 'Tinsukia', 'Dispur'],
-    'Bihar': ['Patna', 'Gaya', 'Bhagalpur', 'Muzaffarpur', 'Darbhanga', 'Purnia', 'Arrah', 'Begusarai'],
-    'Chandigarh': ['Chandigarh'],
-    'Chhattisgarh': ['Raipur', 'Bhilai', 'Bilaspur', 'Korba', 'Durg', 'Rajnandgaon', 'Jagdalpur'],
-    'Dadra and Nagar Haveli and Daman and Diu': ['Daman', 'Diu', 'Silvassa', 'Amli'],
-    'Delhi': ['New Delhi', 'Delhi', 'Noida', 'Gurugram', 'Faridabad', 'Ghaziabad'],
-    'Goa': ['Panaji', 'Margao', 'Vasco da Gama', 'Mapusa', 'Ponda'],
-    'Gujarat': ['Ahmedabad', 'Surat', 'Vadodara', 'Rajkot', 'Gandhinagar', 'Bhavnagar', 'Jamnagar', 'Junagadh'],
-    'Haryana': ['Faridabad', 'Gurugram', 'Panipat', 'Ambala', 'Hisar', 'Rohtak', 'Karnal', 'Sonipat'],
-    'Himachal Pradesh': ['Shimla', 'Manali', 'Dharamshala', 'Kullu', 'Solan', 'Mandi', 'Palampur'],
-    'Jammu and Kashmir': ['Srinagar', 'Jammu', 'Anantnag', 'Baramulla', 'Udhampur', 'Kathua', 'Sopore'],
-    'Jharkhand': ['Ranchi', 'Jamshedpur', 'Dhanbad', 'Bokaro Steel City', 'Deoghar', 'Hazaribagh'],
-    'Karnataka': ['Bengaluru', 'Mysuru', 'Hubli-Dharwad', 'Mangaluru', 'Belagavi', 'Ballari', 'Shivamogga', 'Udupi'],
-    'Kerala': ['Thiruvananthapuram', 'Kochi', 'Kozhikode', 'Thrissur', 'Alappala', 'Kollam', 'Kannur', 'Palakkad'],
-    'Ladakh': ['Leh', 'Kargil'],
-    'Lakshadweep': ['Kavaratti', 'Agatti', 'Minicoy', 'Andrott'],
-    'Madhya Pradesh': ['Indore', 'Bhopal', 'Jabalpur', 'Gwalior', 'Ujjain', 'Sagar', 'Rewa', 'Satna'],
-    'Maharashtra': ['Mumbai', 'Pune', 'Nagpur', 'Nashik', 'Aurangabad', 'Thane', 'Solapur', 'Kolhapur'],
-    'Manipur': ['Imphal', 'Bishnupur', 'Thoubal', 'Churachandpur'],
-    'Meghalaya': ['Shillong', 'Cherrapunji', 'Tura', 'Jowai'],
-    'Mizoram': ['Aizawl', 'Lunglei', 'Champhai'],
-    'Nagaland': ['Kohima', 'Dimapur', 'Mokokchung', 'Wokha'],
-    'Odisha': ['Bhubaneswar', 'Cuttack', 'Rourkela', 'Puri', 'Sambalpur', 'Berhampur', 'Balasore'],
-    'Puducherry': ['Puducherry', 'Karaikal', 'Mahe', 'Yanam'],
-    'Punjab': ['Ludhiana', 'Amritsar', 'Jalandhar', 'Patiala', 'Bathinda', 'Mohali', 'Hoshiarpur'],
-    'Rajasthan': ['Jaipur', 'Jodhpur', 'Udaipur', 'Kota', 'Ajmer', 'Bikaner', 'Alwar', 'Bhilwara'],
-    'Sikkim': ['Gangtok', 'Pelling', 'Lachung', 'Namchi'],
-    'Tamil Nadu': ['Chennai', 'Coimbatore', 'Madurai', 'Tiruchirappalli', 'Salem', 'Tirunelveli', 'Erode', 'Vellore'],
-    'Telangana': ['Hyderabad', 'Warangal', 'Nizamabad', 'Karimnagar', 'Ramagundam', 'Khammam', 'Mahbubnagar'],
-    'Tripura': ['Agartala', 'Udaipur', 'Dharmanagar', 'Kailasahar'],
-    'Uttar Pradesh': ['Lucknow', 'Kanpur', 'Ghaziabad', 'Agra', 'Varanasi', 'Meerut', 'Prayagraj', 'Bareilly', 'Aligarh', 'Moradabad'],
-    'Uttarakhand': ['Dehradun', 'Haridwar', 'Roorkee', 'Nainital', 'Rishikesh', 'Haldwani', 'Kashipur'],
-    'West Bengal': ['Kolkata', 'Asansol', 'Siliguri', 'Durgapur', 'Howrah', 'Darjeeling', 'Kharagpur', 'Haldia'],
-  };
-
   final SharedPreferenceHelper _prefs = SharedPreferenceHelper();
   final FirebaseAuth _auth = FirebaseAuth.instance;
   
-  // Stores original data from Firestore/Cache for change detection
   Map<String, dynamic>? personData;
   Map<String, dynamic>? _initialAddress; 
   String? _initialImage;
 
-  File? _imageFile; // New image file for upload
+  File? _imageFile;
   bool _isLoading = false;
 
   String? _selectedState, _selectedCity;
@@ -78,7 +78,6 @@ class _ProfilePageState extends State<ProfilePage> {
   final TextEditingController _pincodeController = TextEditingController();
   final TextEditingController _mobileController = TextEditingController();
 
-  // Phone verification state
   bool _isPhoneVerified = false;
   String? _verificationId;
   String _verifiedPhoneNumber = '';
@@ -90,51 +89,37 @@ class _ProfilePageState extends State<ProfilePage> {
     userID = widget.userId;
     loadUserData();
 
-    // Add listeners to text controllers to trigger rebuild for button color change
     _localAddressController.addListener(_onFieldChanged);
     _pincodeController.addListener(_onFieldChanged);
     _mobileController.addListener(_onFieldChanged);
 
     _mobileController.addListener(() {
       if (_isPhoneVerified && '+91${_mobileController.text.trim()}' != _verifiedPhoneNumber) {
-        // Only trigger rebuild if verification status actually changes
         if(mounted && _isPhoneVerified) setState(() => _isPhoneVerified = false);
       }
-      _onFieldChanged(); // Also check for general changes
+      _onFieldChanged();
     });
   }
 
-  /// Triggers a rebuild to check for changes and update the Save button color.
   void _onFieldChanged() {
-    // Only rebuild if it's necessary (e.g., to update the Save button state)
-    if (mounted) {
-      setState(() {
-        // Empty setState to re-evaluate _hasChanges() in the build method
-      });
-    }
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
-    _localAddressController.removeListener(_onFieldChanged);
-    _pincodeController.removeListener(_onFieldChanged);
-    _mobileController.removeListener(_onFieldChanged);
     _localAddressController.dispose();
     _pincodeController.dispose();
     _mobileController.dispose();
     super.dispose();
   }
 
-  /// Loads user data from Firestore + cache
   Future<void> loadUserData() async {
     try {
-      // 1. Load cache first for instant UI (Fast read, few reads from Firestore)
       final cachedAddress = await _prefs.getUserAddress();
       if (cachedAddress != null && mounted) {
         _updateAddressFields(cachedAddress, isInitialLoad: true);
       }
 
-      // 2. Fetch fresh from Firestore (Slow read, ensures latest data)
       final doc = await FirebaseFirestore.instance
           .collection('users')
           .doc(userID)
@@ -144,7 +129,7 @@ class _ProfilePageState extends State<ProfilePage> {
         final firestoreData = doc.data()!;
         setState(() {
           personData = firestoreData;
-          _initialImage = firestoreData['Image']; // Set initial image URL
+          _initialImage = firestoreData['Image'];
         });
         
         final address = firestoreData['Address'];
@@ -153,33 +138,30 @@ class _ProfilePageState extends State<ProfilePage> {
         }
       }
     } catch (e) {
-      print("Error loading user data: $e");
+      debugPrint("Error loading user data: $e");
       if (mounted) _showErrorSnackBar("Failed to load user data");
     }
   }
 
-  /// Update form fields from address data and store initial state
   void _updateAddressFields(Map<String, dynamic> address, {bool isInitialLoad = false}) {
     final mobile = address['mobile'] ?? '';
 
     setState(() {
       _selectedState = address['state'];
       if (_selectedState != null) {
-        _cities = indianStatesAndCities[_selectedState] ?? [];
+        _cities = kIndianStatesAndCities[_selectedState] ?? [];
       }
       _selectedCity = address['city'];
       _localAddressController.text = address['local'] ?? '';
       _pincodeController.text = address['pincode'] ?? '';
       _mobileController.text = mobile.replaceFirst('+91', '');
 
-      // Auto-verify if matches current user phone
       final currentUser = _auth.currentUser;
       if (currentUser != null && currentUser.phoneNumber == mobile && mobile.isNotEmpty) {
         _isPhoneVerified = true;
         _verifiedPhoneNumber = mobile;
       }
       
-      // Store initial state for change detection
       if (isInitialLoad) {
         _initialAddress = {
           'state': _selectedState,
@@ -192,14 +174,11 @@ class _ProfilePageState extends State<ProfilePage> {
     });
   }
 
-  /// Checks if any profile field has been changed or a new image has been selected.
   bool _hasChanges() {
-    if (_initialAddress == null) return false; // Data hasn't loaded yet
+    if (_initialAddress == null) return false;
 
-    // Check if new image is selected
     if (_imageFile != null) return true;
 
-    // Check if any address field has changed
     final currentMobile = _mobileController.text.trim().isEmpty ? null : '+91${_mobileController.text.trim()}';
     
     final currentAddress = {
@@ -207,28 +186,24 @@ class _ProfilePageState extends State<ProfilePage> {
       'city': _selectedCity,
       'local': _localAddressController.text.trim(),
       'pincode': _pincodeController.text.trim(),
-      // Use the verified phone number for comparison if phone is verified and no changes to text field
       'mobile': _isPhoneVerified ? _verifiedPhoneNumber : currentMobile, 
     };
 
-    // Simple comparison of map values
     return _initialAddress!['state'] != currentAddress['state'] ||
            _initialAddress!['city'] != currentAddress['city'] ||
            _initialAddress!['local'] != currentAddress['local'] ||
            _initialAddress!['pincode'] != currentAddress['pincode'] ||
            _initialAddress!['mobile'] != currentAddress['mobile'] ||
-           (_imageFile != null && _imageFile!.path.isNotEmpty) || // Check for image change
-           (_initialImage != null && _imageFile != null); // Force change if a new image is selected
+           (_imageFile != null && _imageFile!.path.isNotEmpty) ||
+           (_initialImage != null && _imageFile != null);
   }
 
-  /// Pick and compress profile image
   Future<void> _pickImage() async {
     try {
       final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
       if (picked != null) {
         File imageFile = File(picked.path);
         
-        // Compress if >1MB
         int sizeInBytes = await imageFile.length();
         double sizeInMB = sizeInBytes / (1024 * 1024);
         
@@ -245,7 +220,7 @@ class _ProfilePageState extends State<ProfilePage> {
         }
         
         setState(() => _imageFile = imageFile);
-        _onFieldChanged(); // Trigger rebuild to check for changes
+        _onFieldChanged();
       }
     } catch (e) {
       _showErrorSnackBar("Failed to pick image: $e");
@@ -260,7 +235,6 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  /// Verify phone number with OTP
   Future<void> _verifyPhoneNumber() async {
     if (_mobileController.text.trim().length != 10) {
       _showErrorSnackBar("Please enter a valid 10-digit mobile number.");
@@ -273,7 +247,6 @@ class _ProfilePageState extends State<ProfilePage> {
       final phoneNumber = '+91${_mobileController.text.trim()}';
       final currentUser = _auth.currentUser;
 
-      // Check if phone belongs to another user
       final querySnapshot = await FirebaseFirestore.instance
           .collection('users')
           .where('Address.mobile', isEqualTo: phoneNumber)
@@ -301,13 +274,14 @@ class _ProfilePageState extends State<ProfilePage> {
               );
             }
           } catch (e) {
-            if (mounted) _showErrorSnackBar("Failed to link credential: ${e.toString()}");
+            // Already linked or error
           } finally {
             if (mounted) setState(() => _isLoading = false);
           }
         },
         verificationFailed: (FirebaseAuthException e) {
           if (mounted) _showErrorSnackBar("Failed to verify phone number: ${e.message}");
+          if (mounted) setState(() => _isLoading = false);
         },
         codeSent: (String verificationId, int? resendToken) {
           if (mounted) {
@@ -321,7 +295,6 @@ class _ProfilePageState extends State<ProfilePage> {
       );
     } catch (e) {
       if (mounted) _showErrorSnackBar("An error occurred. Please try again.");
-    } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -340,7 +313,13 @@ class _ProfilePageState extends State<ProfilePage> {
           decoration: const InputDecoration(hintText: "******"),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          TextButton(
+            onPressed: () { 
+              Navigator.pop(context);
+              if (mounted) setState(() => _isLoading = false); 
+            }, 
+            child: const Text("Cancel")
+          ),
           ElevatedButton(
             onPressed: () async {
               if (_verificationId == null) return;
@@ -354,7 +333,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   setState(() {
                     _isPhoneVerified = true;
                     _verifiedPhoneNumber = '+91${_mobileController.text.trim()}';
-                    _onFieldChanged(); // Trigger check for changes
+                    _onFieldChanged();
                   });
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -363,6 +342,8 @@ class _ProfilePageState extends State<ProfilePage> {
                 }
               } catch (e) {
                 _showErrorSnackBar("Invalid OTP. Please try again.");
+              } finally {
+                if (mounted) setState(() => _isLoading = false);
               }
             },
             child: const Text("Submit"),
@@ -372,7 +353,6 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  /// Complete profile save with proper error handling
   Future<void> _saveProfile() async {
     if (!_hasChanges()) {
       _showErrorSnackBar("No changes to save.");
@@ -401,9 +381,7 @@ class _ProfilePageState extends State<ProfilePage> {
     String? imageUrl = personData?['Image'];
 
     try {
-      // 1. Upload new image if selected
       if (_imageFile != null) {
-        print('📸 Uploading image for user: $userID');
         final storageRef = FirebaseStorage.instance
             .ref()
             .child('profile_images')
@@ -411,10 +389,8 @@ class _ProfilePageState extends State<ProfilePage> {
         final uploadTask = storageRef.putFile(_imageFile!);
         await uploadTask;
         imageUrl = await storageRef.getDownloadURL();
-        print('✅ Image uploaded: $imageUrl');
       }
 
-      // 2. Structure address
       final structuredAddress = {
         'state': _selectedState,
         'city': _selectedCity,
@@ -423,29 +399,21 @@ class _ProfilePageState extends State<ProfilePage> {
         'mobile': _verifiedPhoneNumber,
       };
 
-      // 3. Complete user profile data to save
       final completeUserProfile = {
         'Name': personData?['Name'] ?? _auth.currentUser?.displayName ?? 'User',
         'Email': personData?['Email'] ?? _auth.currentUser?.email ?? '',
         'Image': imageUrl,
         'Address': structuredAddress,
-        'createdAt': personData?['createdAt'] ?? FieldValue.serverTimestamp(), // Preserve original creation time
+        'createdAt': personData?['createdAt'] ?? FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
-      print('💾 Saving profile to Firestore: $userID');
-      print('📍 Address: $structuredAddress');
-
-      // 4. Use set() with merge: true (creates doc if missing/updates existing)
       await FirebaseFirestore.instance
           .collection('users')
           .doc(userID)
           .set(completeUserProfile, SetOptions(merge: true));
 
-      // 5. Cache locally (for faster next load)
       await _prefs.saveUserAddress(structuredAddress);
-      
-      print('✅ Profile saved successfully for user: $userID');
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -453,19 +421,16 @@ class _ProfilePageState extends State<ProfilePage> {
         );
       }
       
-      // Refresh data and initial state
       await loadUserData();
       
-    } catch (e, stackTrace) {
-      print('❌ Save failed: $e');
-      print('Stack trace: $stackTrace');
+    } catch (e) {
       if (mounted) _showErrorSnackBar('Failed to save profile: ${e.toString()}');
     } finally {
       if (mounted) {
         setState(() { 
           _isLoading = false; 
-          _imageFile = null; // Clear image file after successful upload/save
-          _onFieldChanged(); // Re-evaluate changes
+          _imageFile = null; 
+          _onFieldChanged(); 
         });
       }
     }
@@ -489,7 +454,7 @@ class _ProfilePageState extends State<ProfilePage> {
           .toList(),
       onChanged: (newValue) {
         onChanged?.call(newValue);
-        _onFieldChanged(); // Trigger change check
+        _onFieldChanged();
       },
       decoration: const InputDecoration(),
     );
@@ -521,7 +486,6 @@ class _ProfilePageState extends State<ProfilePage> {
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
 
-    // Check for changes to determine button color and active state
     final bool hasChanges = _hasChanges();
     final bool isButtonDisabled = _isLoading || !hasChanges;
     final Color buttonColor = isButtonDisabled ? Colors.grey : colorScheme.primary;
@@ -530,12 +494,14 @@ class _ProfilePageState extends State<ProfilePage> {
     if (_imageFile != null) {
       imageProvider = FileImage(_imageFile!);
     } else if (personData?['Image'] != null && personData!['Image'].toString().isNotEmpty) {
-      imageProvider = NetworkImage(personData!['Image']);
+      // ✅ OPTIMIZED: Cached Network Image Provider
+      imageProvider = CachedNetworkImageProvider(personData!['Image']);
     } else {
       imageProvider = const AssetImage('lib/assets/images/white.png');
     }
 
     return Scaffold(
+      resizeToAvoidBottomInset: true, // ✅ Ensures keyboard doesn't hide Save button
       appBar: AppBar(
         actions: [
           IconButton(
@@ -547,8 +513,6 @@ class _ProfilePageState extends State<ProfilePage> {
                     builder: (context) => UserOrdersPage(userId: widget.userId!),
                   ),
                 );
-              } else {
-                _showErrorSnackBar("User ID not found. Please log in.");
               }
             },
           ),
@@ -568,7 +532,6 @@ class _ProfilePageState extends State<ProfilePage> {
       body: personData == null
           ? const ProfileShimmer()
           : SingleChildScrollView(
-              // Added extra padding at the bottom for the BottomNavigationBar
               padding: const EdgeInsets.fromLTRB(24, 24, 24, 100), 
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
@@ -636,6 +599,7 @@ class _ProfilePageState extends State<ProfilePage> {
                               prefixIcon: Icon(Icons.phone_android, color: colorScheme.primary),
                               prefixText: "+91 ",
                               fillColor: _isPhoneVerified ? Colors.grey.shade200.withAlpha(128) : null,
+                              filled: _isPhoneVerified,
                               suffixIcon: TextButton(
                                 onPressed: _isPhoneVerified ? null : _verifyPhoneNumber,
                                 child: _isLoading
@@ -667,12 +631,12 @@ class _ProfilePageState extends State<ProfilePage> {
                           _buildDropdown(
                             hint: "Select State",
                             value: _selectedState,
-                            items: indianStatesAndCities.keys.toList(),
+                            items: kIndianStatesAndCities.keys.toList(),
                             onChanged: (newValue) {
                               setState(() {
                                 _selectedState = newValue;
                                 _selectedCity = null;
-                                _cities = indianStatesAndCities[newValue] ?? [];
+                                _cities = kIndianStatesAndCities[newValue] ?? [];
                               });
                             },
                           ),
@@ -709,7 +673,6 @@ class _ProfilePageState extends State<ProfilePage> {
                 ],
               ),
             ),
-      // --- START: Bottom Bar for Save Profile ---
       bottomNavigationBar: Container(
         padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
         decoration: BoxDecoration(
@@ -726,7 +689,7 @@ class _ProfilePageState extends State<ProfilePage> {
           height: 55,
           width: double.infinity,
           child: ElevatedButton.icon(
-            onPressed: isButtonDisabled ? null : _saveProfile, // Use disabled state based on changes
+            onPressed: isButtonDisabled ? null : _saveProfile,
             icon: _isLoading
                 ? SizedBox(
                     height: 20,
@@ -739,9 +702,9 @@ class _ProfilePageState extends State<ProfilePage> {
                 : const Icon(Icons.save),
             label: Text(_isLoading ? "Saving..." : "Save Profile"),
             style: ElevatedButton.styleFrom(
-              backgroundColor: buttonColor, // Dynamic color based on changes
+              backgroundColor: buttonColor,
               foregroundColor: colorScheme.onPrimary,
-              disabledBackgroundColor: Colors.grey.shade400, // Explicit disabled color
+              disabledBackgroundColor: Colors.grey.shade400,
               disabledForegroundColor: Colors.grey.shade700,
               textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -749,9 +712,6 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
         ),
       ),
-      // --- END: Bottom Bar for Save Profile ---
-      // Removed the FloatingActionButton
-      // floatingActionButton: FloatingActionButton.extended(...)
     );
   }
 }

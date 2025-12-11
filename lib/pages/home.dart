@@ -1,7 +1,8 @@
+import 'package:cached_network_image/cached_network_image.dart'; // ✅ Added for performance
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ecommerce_shop/pages/category_products.dart';
 import 'package:ecommerce_shop/pages/discover_page.dart';
-import 'package:ecommerce_shop/pages/product_details.dart'; 
+import 'package:ecommerce_shop/pages/product_details.dart';
 import 'package:ecommerce_shop/pages/profile.dart';
 import 'package:ecommerce_shop/pages/seach_page.dart';
 import 'package:ecommerce_shop/services/cart_provider.dart';
@@ -21,7 +22,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   String userName = '';
   String userImageUrl = '';
-  bool _isPageLoading = true; 
+  bool _isPageLoading = true;
 
   // PAGINATION VARIABLES
   final ScrollController _horizontalScrollController = ScrollController();
@@ -29,7 +30,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoadingMoreProducts = false;
   bool _hasMoreProducts = true;
   DocumentSnapshot? _lastProductDoc;
-  static const int _productsPerBatch = 10; 
+  static const int _productsPerBatch = 10;
 
   static const List<Map<String, String>> categories = [
     {'name': 'All', 'image': ''},
@@ -59,6 +60,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _initializeData() async {
+    // Parallel fetching: Very good for performance!
     await Future.wait([
       _loadUserData(),
       _loadCartData(),
@@ -129,7 +131,7 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       Query query = FirebaseFirestore.instance
           .collection('products')
-          .orderBy('Name') 
+          .orderBy('Name')
           .limit(_productsPerBatch);
 
       if (_lastProductDoc != null) {
@@ -159,7 +161,7 @@ class _HomeScreenState extends State<HomeScreen> {
     double rating = (data['averageRating'] as num?)?.toDouble() ?? 0.0;
     int count = (data['reviewCount'] as num?)?.toInt() ?? 0;
 
-    if (count == 0) return const SizedBox(height: 5); 
+    if (count == 0) return const SizedBox(height: 5);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 5.0),
@@ -168,11 +170,11 @@ class _HomeScreenState extends State<HomeScreen> {
           const Icon(Icons.star, color: Colors.amber, size: 14),
           const SizedBox(width: 4),
           Text(
-            rating.toStringAsFixed(1), 
+            rating.toStringAsFixed(1),
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
           ),
           Text(
-            " ($count)", 
+            " ($count)",
             style: TextStyle(color: Colors.grey[600], fontSize: 12),
           ),
         ],
@@ -180,7 +182,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 🔥 SHIMMER PRODUCT CARD (NEW)
   Widget _buildProductShimmer() {
     return Container(
       width: 160,
@@ -202,7 +203,6 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Image shimmer
             Container(
               height: 110,
               decoration: BoxDecoration(
@@ -211,34 +211,22 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             const SizedBox(height: 10),
-            // Name shimmer
             Container(
               width: 100,
               height: 12,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(4),
-              ),
+              color: Colors.white,
             ),
             const SizedBox(height: 4),
-            // Rating shimmer
             Container(
               width: 60,
               height: 10,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(4),
-              ),
+              color: Colors.white,
             ),
             const SizedBox(height: 4),
-            // Price shimmer
             Container(
               width: 80,
               height: 14,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(4),
-              ),
+              color: Colors.white,
             ),
           ],
         ),
@@ -274,17 +262,18 @@ class _HomeScreenState extends State<HomeScreen> {
             Expanded(
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(10),
-                child: Container(
-                  color: Colors.grey[100],
-                  child: Image.network(
-                    productData['Image'] ?? '',
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const Icon(
-                      Icons.broken_image,
-                      size: 50,
-                      color: Colors.grey,
-                    ),
+                // ✅ OPTIMIZED: Cached Image for Home Screen List
+                child: CachedNetworkImage(
+                  imageUrl: productData['Image'] ?? '',
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  placeholder: (context, url) => Container(
+                    color: Colors.grey[200],
+                  ),
+                  errorWidget: (_, __, ___) => const Icon(
+                    Icons.broken_image,
+                    size: 50,
+                    color: Colors.grey,
                   ),
                 ),
               ),
@@ -325,7 +314,8 @@ class _HomeScreenState extends State<HomeScreen> {
           : SafeArea(
               child: SingleChildScrollView(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 20.0, vertical: 16.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -338,32 +328,43 @@ class _HomeScreenState extends State<HomeScreen> {
                             children: [
                               Text(
                                 'Hey, $userName!',
-                                style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                                style: textTheme.headlineSmall
+                                    ?.copyWith(fontWeight: FontWeight.bold),
                               ),
                               Text(
                                 'Good day!',
-                                style: textTheme.titleMedium?.copyWith(color: Colors.grey[600]),
+                                style: textTheme.titleMedium
+                                    ?.copyWith(color: Colors.grey[600]),
                               ),
                             ],
                           ),
                           GestureDetector(
                             onTap: () => Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (_) => ProfilePage(userId: widget.userId)),
+                              MaterialPageRoute(
+                                  builder: (_) =>
+                                      ProfilePage(userId: widget.userId)),
                             ),
                             child: Container(
                               height: 50,
                               width: 50,
                               decoration: BoxDecoration(
-                                border: Border.all(color: colorScheme.primary, width: 2),
+                                border: Border.all(
+                                    color: colorScheme.primary, width: 2),
                                 shape: BoxShape.circle,
                               ),
                               child: ClipOval(
+                                // ✅ OPTIMIZED: Cached User Profile
                                 child: userImageUrl.isNotEmpty
-                                    ? Image.network(
-                                        userImageUrl,
+                                    ? CachedNetworkImage(
+                                        imageUrl: userImageUrl,
                                         fit: BoxFit.cover,
-                                        errorBuilder: (_, __, ___) => const Icon(Icons.person),
+                                        placeholder: (context, url) =>
+                                            CircleAvatar(
+                                          backgroundColor: colorScheme.surface,
+                                        ),
+                                        errorWidget: (_, __, ___) =>
+                                            const Icon(Icons.person),
                                       )
                                     : CircleAvatar(
                                         backgroundColor: colorScheme.surface,
@@ -375,21 +376,24 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                       const SizedBox(height: 20.0),
-                      
+
                       Text(
                         'What are you looking for?',
-                        style: textTheme.titleMedium?.copyWith(color: Colors.grey[600]),
+                        style: textTheme.titleMedium
+                            ?.copyWith(color: Colors.grey[600]),
                       ),
                       const SizedBox(height: 10),
-                      
+
                       // Search Bar
                       GestureDetector(
                         onTap: () => Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (_) => const SearchPage()),
+                          MaterialPageRoute(
+                              builder: (_) => const SearchPage()),
                         ),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 15, vertical: 14),
                           decoration: BoxDecoration(
                             color: Colors.grey[100],
                             borderRadius: BorderRadius.circular(12),
@@ -401,7 +405,8 @@ class _HomeScreenState extends State<HomeScreen> {
                               const SizedBox(width: 10),
                               Text(
                                 "Search for products...",
-                                style: TextStyle(color: Colors.grey[600], fontSize: 16),
+                                style: TextStyle(
+                                    color: Colors.grey[600], fontSize: 16),
                               ),
                             ],
                           ),
@@ -412,7 +417,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       // Categories Section
                       Text(
                         'Categories',
-                        style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                        style: textTheme.titleLarge
+                            ?.copyWith(fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 20.0),
                       SizedBox(
@@ -420,7 +426,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: ListView.separated(
                           scrollDirection: Axis.horizontal,
                           itemCount: categories.length,
-                          separatorBuilder: (_, __) => const SizedBox(width: 10),
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(width: 10),
                           itemBuilder: (context, index) {
                             final categoryItem = categories[index];
                             final isAll = categoryItem['name'] == 'All';
@@ -428,21 +435,26 @@ class _HomeScreenState extends State<HomeScreen> {
                               onTap: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => CategoryProducts(category: categoryItem['name']!),
+                                  builder: (context) => CategoryProducts(
+                                      category: categoryItem['name']!),
                                 ),
                               ),
                               child: Container(
                                 width: 100,
                                 decoration: BoxDecoration(
-                                  color: isAll ? colorScheme.primary : colorScheme.surface,
-                                  border: Border.all(color: colorScheme.primary, width: 2),
+                                  color: isAll
+                                      ? colorScheme.primary
+                                      : colorScheme.surface,
+                                  border: Border.all(
+                                      color: colorScheme.primary, width: 2),
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: isAll
                                     ? Center(
                                         child: Text(
                                           'All',
-                                          style: textTheme.titleMedium?.copyWith(
+                                          style: textTheme.titleMedium
+                                              ?.copyWith(
                                             color: colorScheme.onPrimary,
                                             fontWeight: FontWeight.bold,
                                           ),
@@ -455,7 +467,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                           child: Image.asset(
                                             categoryItem['image']!,
                                             fit: BoxFit.contain,
-                                            errorBuilder: (c, e, s) => const Icon(Icons.category),
+                                            errorBuilder: (c, e, s) =>
+                                                const Icon(Icons.category),
                                           ),
                                         ),
                                       ),
@@ -472,12 +485,15 @@ class _HomeScreenState extends State<HomeScreen> {
                         children: [
                           Text(
                             'Featured Products',
-                            style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                            style: textTheme.titleLarge
+                                ?.copyWith(fontWeight: FontWeight.bold),
                           ),
                           GestureDetector(
                             onTap: () => Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (context) => const DiscoverPage()),
+                              MaterialPageRoute(
+                                  builder: (context) =>
+                                      const DiscoverPage()),
                             ),
                             child: Text(
                               'See All',
@@ -500,9 +516,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                   padding: EdgeInsets.all(40),
                                   child: Column(
                                     children: [
-                                      Icon(Icons.inventory_2_outlined, size: 64, color: Colors.grey),
+                                      Icon(Icons.inventory_2_outlined,
+                                          size: 64, color: Colors.grey),
                                       SizedBox(height: 8),
-                                      Text("No products found.", style: TextStyle(color: Colors.grey, fontSize: 16)),
+                                      Text("No products found.",
+                                          style: TextStyle(
+                                              color: Colors.grey, fontSize: 16)),
                                     ],
                                   ),
                                 ),
@@ -510,15 +529,20 @@ class _HomeScreenState extends State<HomeScreen> {
                             : ListView.separated(
                                 controller: _horizontalScrollController,
                                 scrollDirection: Axis.horizontal,
-                                itemCount: _products.length + (_isLoadingMoreProducts ? 3 : (_hasMoreProducts ? 1 : 0)),
-                                separatorBuilder: (context, index) => const SizedBox(width: 15),
+                                itemCount: _products.length +
+                                    (_isLoadingMoreProducts
+                                        ? 3
+                                        : (_hasMoreProducts ? 1 : 0)),
+                                separatorBuilder: (context, index) =>
+                                    const SizedBox(width: 15),
                                 itemBuilder: (context, index) {
                                   // 🔥 SHIMMER WHEN LOADING
                                   if (index >= _products.length) {
                                     return _buildProductShimmer();
                                   }
 
-                                  final productData = _products[index].data() as Map<String, dynamic>;
+                                  final productData = _products[index].data()
+                                      as Map<String, dynamic>;
                                   return _buildProductCard(productData);
                                 },
                               ),

@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ecommerce_shop/utils/database.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // Added: Source of truth for user ID
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 
@@ -14,11 +14,11 @@ class AddReviewPage extends StatefulWidget {
 }
 
 class _AddReviewPageState extends State<AddReviewPage> {
-  // 1. Added Form Key for validation
-  final _formKey = GlobalKey<FormState>(); 
-  
+  final _formKey = GlobalKey<FormState>();
   final TextEditingController _reviewController = TextEditingController();
-  double _rating = 0;
+  
+  // Initialize rating to 0 to detect if user touched it
+  double _rating = 0; 
   bool _isLoading = false;
 
   @override
@@ -40,16 +40,19 @@ class _AddReviewPageState extends State<AddReviewPage> {
       ));
   }
 
-  /// Submits the review to the database.
   Future<void> _submitReview() async {
-    // 1. Validate form and dismiss keyboard
     if (!_formKey.currentState!.validate()) return;
-    FocusScope.of(context).unfocus();
+    
+    // 🚨 FIX: Ensure user selected a rating
+    if (_rating == 0) {
+      _showSnackBar("Please select a star rating.", isError: true);
+      return;
+    }
 
+    FocusScope.of(context).unfocus();
     setState(() => _isLoading = true);
 
     try {
-      // ⭐️ FIX 1: Get User ID from Firebase Auth (Source of Truth)
       final userId = FirebaseAuth.instance.currentUser?.uid;
       if (userId == null) {
         _showSnackBar("Session expired. Please log in again.", isError: true);
@@ -57,23 +60,22 @@ class _AddReviewPageState extends State<AddReviewPage> {
       }
       
       final productId = widget.productData['id'];
-      if (productId == null) {
-          throw Exception("Product ID is missing.");
-      }
+      if (productId == null) throw Exception("Product ID is missing.");
 
-      // ⭐️ FIX 2: Check for existing review by using the UserID as the Document ID.
-      // This is fast, atomic, and prevents race conditions/duplicates.
+      // Check existence using UserID as DocID (Fast & Secure)
       final reviewDocRef = FirebaseFirestore.instance
           .collection('products')
           .doc(productId)
           .collection('reviews')
-          .doc(userId); // Document ID is the User ID
+          .doc(userId);
 
       if ((await reviewDocRef.get()).exists) {
         _showSnackBar("You have already reviewed this product.", isError: true);
         return;
       }
 
+      // NOTE: Ensure DatabaseMethods().addReview also updates 
+      // the product's 'averageRating' and 'reviewCount' atomically!
       final result = await DatabaseMethods().addReview(
         productId: productId,
         userId: userId,
@@ -84,7 +86,7 @@ class _AddReviewPageState extends State<AddReviewPage> {
       _showSnackBar(result, isError: !result.contains("successfully"));
 
       if (mounted && result.contains("successfully")) {
-        Navigator.pop(context); // Go back to Product Details on success
+        Navigator.pop(context);
       }
     } catch (e) {
       _showSnackBar("An unexpected error occurred: $e", isError: true);
@@ -103,8 +105,8 @@ class _AddReviewPageState extends State<AddReviewPage> {
       appBar: AppBar(
         title: Text('Write a Review', style: textTheme.titleLarge),
         backgroundColor: colorScheme.surface,
+        centerTitle: true,
       ),
-      // 2. Wrap content in SingleChildScrollView and Form
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Form(
@@ -118,62 +120,74 @@ class _AddReviewPageState extends State<AddReviewPage> {
               ),
               const SizedBox(height: 24),
               
-              // --- Star Rating Section ---
               Text('Your Rating:', style: textTheme.titleMedium),
-              const SizedBox(height: 8),
-              RatingBar.builder(
-                initialRating: _rating,
-                minRating: 1,
-                direction: Axis.horizontal,
-                allowHalfRating: false,
-                itemCount: 5,
-                itemSize: 36,
-                ignoreGestures: _isLoading, 
-                itemPadding: const EdgeInsets.symmetric(horizontal: 4.0),
-                itemBuilder: (context, _) => Icon(
-                  Icons.star,
-                  color: colorScheme.primary,
+              const SizedBox(height: 12),
+              Center(
+                child: RatingBar.builder(
+                  initialRating: _rating,
+                  minRating: 1,
+                  direction: Axis.horizontal,
+                  allowHalfRating: false,
+                  itemCount: 5,
+                  itemSize: 40,
+                  glow: false, // Disables the glow effect for a cleaner look
+                  ignoreGestures: _isLoading, 
+                  itemPadding: const EdgeInsets.symmetric(horizontal: 4.0),
+                  itemBuilder: (context, _) => Icon(
+                    Icons.star,
+                    color: colorScheme.primary,
+                  ),
+                  onRatingUpdate: (rating) {
+                    setState(() => _rating = rating);
+                  },
                 ),
-                onRatingUpdate: (rating) {
-                  setState(() => _rating = rating);
-                },
-                // Add validator to ensure rating is set
-                // (Note: RatingBar doesn't have a native validator, so we use manual check in _submitReview)
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 30),
 
-              // --- Text Review Section ---
               Text('Your Review:', style: textTheme.titleMedium),
               const SizedBox(height: 8),
-              TextFormField( // 3. Use TextFormField for integrated validation
+              TextFormField(
                 controller: _reviewController,
                 maxLines: 5,
                 enabled: !_isLoading,
+                maxLength: 500, // Good practice to limit review length
                 decoration: InputDecoration(
                   hintText: 'Share your thoughts about this product...',
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                   filled: true,
-                  fillColor: Colors.grey[100],
+                  fillColor: Colors.grey[50],
                 ),
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
                     return 'Review text cannot be empty.';
+                  }
+                  if (value.trim().length < 10) {
+                    return 'Review must be at least 10 characters.';
                   }
                   return null;
                 },
               ),
               const SizedBox(height: 30),
 
-              // --- Submit Button ---
               SizedBox(
                 width: double.infinity,
                 height: 55,
                 child: ElevatedButton.icon(
                   onPressed: _isLoading ? null : _submitReview,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: colorScheme.primary,
+                    foregroundColor: colorScheme.onPrimary,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)
+                    ),
+                  ),
                   icon: _isLoading
-                      ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
+                      ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                       : const Icon(Icons.send),
-                  label: Text(_isLoading ? "Submitting..." : "Submit Review"),
+                  label: Text(
+                    _isLoading ? "Submitting..." : "Submit Review",
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
                 ),
               ),
             ],

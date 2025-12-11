@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart'; // ✅ Added for optimization
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ecommerce_shop/pages/order_screen.dart';
 import 'package:ecommerce_shop/pages/profile.dart';
@@ -309,13 +310,23 @@ class _CartPageState extends State<CartPage> {
                                   topLeft: Radius.circular(12),
                                   bottomLeft: Radius.circular(12),
                                 ),
-                                child: Image.network(
-                                  item['Image'] ?? '',
+                                // 🔥 FIXED: Using CachedNetworkImage for performance
+                                child: CachedNetworkImage(
+                                  imageUrl: item['Image'] ?? '',
                                   width: 120,
                                   height: 120,
                                   fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) =>
-                                      const Icon(Icons.broken_image, size: 80),
+                                  placeholder: (context, url) => Container(
+                                    color: Colors.grey[200],
+                                    child: const Center(
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    ),
+                                  ),
+                                  errorWidget: (_, __, ___) => const Icon(
+                                    Icons.broken_image,
+                                    size: 80,
+                                    color: Colors.grey,
+                                  ),
                                 ),
                               ),
                               const SizedBox(width: 16),

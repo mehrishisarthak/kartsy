@@ -1,6 +1,7 @@
+import 'package:cached_network_image/cached_network_image.dart'; // ✅ Added for performance
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ecommerce_shop/pages/product_details.dart';
-import 'package:ecommerce_shop/pages/seach_page.dart'; 
+import 'package:ecommerce_shop/pages/seach_page.dart';
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
 
@@ -12,7 +13,9 @@ class DiscoverPage extends StatefulWidget {
 }
 
 class _DiscoverPageState extends State<DiscoverPage> {
+  // Use ScrollController to listen for bottom reach
   final ScrollController _scrollController = ScrollController();
+  
   final List<DocumentSnapshot> _products = [];
   bool _isLoading = false;
   bool _hasMore = true;
@@ -25,8 +28,8 @@ class _DiscoverPageState extends State<DiscoverPage> {
     _fetchProducts();
 
     _scrollController.addListener(() {
-      if (_scrollController.position.pixels >= 
-          _scrollController.position.maxScrollExtent - 100) {
+      if (_scrollController.position.pixels >=
+          _scrollController.position.maxScrollExtent - 200) { // Load slightly before bottom
         _fetchProducts();
       }
     });
@@ -66,38 +69,73 @@ class _DiscoverPageState extends State<DiscoverPage> {
         }
       }
     } catch (e) {
-      print("Error loading discover products: $e");
+      debugPrint("Error loading discover products: $e");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Widget _buildRatingRow(Map<String, dynamic> data) {
-    double rating = (data['averageRating'] as num?)?.toDouble() ?? 0.0;
-    int count = (data['reviewCount'] as num?)?.toInt() ?? 0;
+  // --- WIDGETS ---
 
-    if (count == 0) return const SizedBox(height: 5);
+  Widget _buildSearchField() {
+    return GestureDetector(
+      onTap: () => Navigator.push(
+          context, MaterialPageRoute(builder: (_) => const SearchPage())),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.grey[200],
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.search, color: Colors.grey),
+            SizedBox(width: 10),
+            Text("Search products...", style: TextStyle(color: Colors.grey)),
+          ],
+        ),
+      ),
+    );
+  }
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 5.0),
+  Widget _buildInfoSection() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
         children: [
-          const Icon(Icons.star, color: Colors.amber, size: 14),
-          const SizedBox(width: 4),
-          Text(
-            rating.toStringAsFixed(1),
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-          ),
-          Text(
-            " ($count)",
-            style: TextStyle(color: Colors.grey[600], fontSize: 12),
-          ),
+          _buildInfoCard(
+              icon: Icons.local_shipping_outlined, text: "Fast Delivery"),
+          const SizedBox(width: 16),
+          _buildInfoCard(
+              icon: Icons.verified_user_outlined, text: "Secure Payments"),
         ],
       ),
     );
   }
 
-  // 🔥 SHIMMER PRODUCT CARD (NEW)
+  Widget _buildInfoCard({required IconData icon, required String text}) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: BoxDecoration(
+        color: colorScheme.primary.withAlpha(25),
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 24, color: colorScheme.primary),
+          const SizedBox(width: 12),
+          Text(text,
+              style: textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
   Widget _buildProductShimmer() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -107,10 +145,9 @@ class _DiscoverPageState extends State<DiscoverPage> {
         borderRadius: BorderRadius.circular(10),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
-          ),
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 5)),
         ],
       ),
       child: Shimmer.fromColors(
@@ -118,57 +155,18 @@ class _DiscoverPageState extends State<DiscoverPage> {
         highlightColor: Colors.grey[100]!,
         child: Row(
           children: [
-            // Image shimmer
-            Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
+            Container(width: 100, height: 100, color: Colors.white),
             const SizedBox(width: 20),
-            // Details shimmer
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 120,
-                    height: 14,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
+                  Container(width: 120, height: 14, color: Colors.white),
                   const SizedBox(height: 8),
-                  Container(
-                    width: 80,
-                    height: 12,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
+                  Container(width: 80, height: 12, color: Colors.white),
                   const SizedBox(height: 8),
-                  Container(
-                    width: 100,
-                    height: 16,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
+                  Container(width: 100, height: 16, color: Colors.white),
                 ],
-              ),
-            ),
-            // Arrow shimmer
-            Container(
-              width: 30,
-              height: 30,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(10),
               ),
             ),
           ],
@@ -205,29 +203,26 @@ class _DiscoverPageState extends State<DiscoverPage> {
         ),
         child: Row(
           children: [
+            // ✅ OPTIMIZED: Cached Image
             ClipRRect(
               borderRadius: BorderRadius.circular(10),
               child: Container(
                 color: Colors.grey[100],
-                child: Image.network(
-                  productData['Image'] ?? '',
+                child: CachedNetworkImage(
+                  imageUrl: productData['Image'] ?? '',
                   height: 100,
                   width: 100,
                   fit: BoxFit.cover,
-                  loadingBuilder: (context, child, progress) {
-                    if (progress == null) return child;
-                    return Container(
-                      height: 100,
-                      width: 100,
-                      color: Colors.grey[200],
-                      child: const Center(child: Icon(Icons.image, size: 30, color: Colors.grey)),
-                    );
-                  },
-                  errorBuilder: (context, error, stackTrace) => Container(
+                  placeholder: (context, url) => Container(
                     height: 100,
                     width: 100,
                     color: Colors.grey[200],
-                    child: const Icon(Icons.broken_image),
+                  ),
+                  errorWidget: (context, url, error) => Container(
+                    height: 100,
+                    width: 100,
+                    color: Colors.grey[200],
+                    child: const Icon(Icons.broken_image, color: Colors.grey),
                   ),
                 ),
               ),
@@ -239,7 +234,8 @@ class _DiscoverPageState extends State<DiscoverPage> {
                 children: [
                   Text(
                     productData['Name'] ?? 'No Name',
-                    style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                    style: textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.bold),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -262,7 +258,8 @@ class _DiscoverPageState extends State<DiscoverPage> {
                 color: colorScheme.primary,
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 20),
+              child: const Icon(Icons.arrow_forward_ios,
+                  color: Colors.white, size: 20),
             ),
           ],
         ),
@@ -270,56 +267,21 @@ class _DiscoverPageState extends State<DiscoverPage> {
     );
   }
 
-  Widget _buildSearchField() {
-    return GestureDetector(
-      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SearchPage())),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.grey[200],
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: const Row(
-          children: [
-            Icon(Icons.search, color: Colors.grey),
-            SizedBox(width: 10),
-            Text("Search products...", style: TextStyle(color: Colors.grey)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInfoSection() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+  Widget _buildRatingRow(Map<String, dynamic> data) {
+    double rating = (data['averageRating'] as num?)?.toDouble() ?? 0.0;
+    int count = (data['reviewCount'] as num?)?.toInt() ?? 0;
+    if (count == 0) return const SizedBox(height: 5);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 5.0),
       child: Row(
         children: [
-          _buildInfoCard(icon: Icons.local_shipping_outlined, text: "Fast Delivery"),
-          const SizedBox(width: 16),
-          _buildInfoCard(icon: Icons.verified_user_outlined, text: "Secure Payments"),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoCard({required IconData icon, required String text}) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final textTheme = theme.textTheme;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      decoration: BoxDecoration(
-        color: colorScheme.primary.withAlpha(25),
-        borderRadius: BorderRadius.circular(15),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 24, color: colorScheme.primary),
-          const SizedBox(width: 12),
-          Text(text, style: textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
+          const Icon(Icons.star, color: Colors.amber, size: 14),
+          const SizedBox(width: 4),
+          Text(rating.toStringAsFixed(1),
+              style:
+                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          Text(" ($count)",
+              style: TextStyle(color: Colors.grey[600], fontSize: 12)),
         ],
       ),
     );
@@ -332,14 +294,13 @@ class _DiscoverPageState extends State<DiscoverPage> {
         title: const Text('Discover Products'),
         centerTitle: true,
       ),
-      body: ListView.builder(
+      // ✅ OPTIMIZED: Using CustomScrollView for mixed content types
+      body: CustomScrollView(
         controller: _scrollController,
-        padding: const EdgeInsets.only(bottom: 20),
-        itemCount: 1 + _products.length + (_isLoading ? 3 : (_hasMore ? 1 : 0)), // 🔥 3 SHIMMERS
-        itemBuilder: (context, index) {
-          // Header (Index 0)
-          if (index == 0) {
-            return Column(
+        slivers: [
+          // 1. Search Bar Area
+          SliverToBoxAdapter(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 20),
@@ -354,23 +315,41 @@ class _DiscoverPageState extends State<DiscoverPage> {
                   padding: const EdgeInsets.symmetric(horizontal: 20.0),
                   child: Text(
                     "All Products",
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                    style: Theme.of(context)
+                        .textTheme
+                        .headlineSmall
+                        ?.copyWith(fontWeight: FontWeight.bold),
                   ),
                 ),
                 const SizedBox(height: 10),
               ],
-            );
-          }
+            ),
+          ),
 
-          // 🔥 SHIMMER LOADING (Last 3 indices)
-          if (index >= _products.length + 1) {
-            return _buildProductShimmer();
-          }
+          // 2. Product List
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final productData =
+                    _products[index].data() as Map<String, dynamic>;
+                return _buildProductCard(productData);
+              },
+              childCount: _products.length,
+            ),
+          ),
 
-          // Real products
-          final productData = _products[index - 1].data() as Map<String, dynamic>;
-          return _buildProductCard(productData);
-        },
+          // 3. Loading Indicator / Shimmer at bottom
+          if (_isLoading || _hasMore)
+            SliverToBoxAdapter(
+              child: Column(
+                children: List.generate(
+                    3, (index) => _buildProductShimmer()),
+              ),
+            ),
+            
+          // Extra padding for bottom
+          const SliverToBoxAdapter(child: SizedBox(height: 40)),
+        ],
       ),
     );
   }

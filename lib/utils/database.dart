@@ -52,7 +52,7 @@ class DatabaseMethods {
     required String userId,
     required List<Map<String, dynamic>> cartItems,
     required CartProvider cartProvider,
-    required String address, // Assuming you will pass address later
+    required String address,
   }) async {
     if (cartItems.isEmpty) return "Cannot place an order with an empty cart.";
 
@@ -61,7 +61,7 @@ class DatabaseMethods {
 
     try {
       // 1. Generate a Single Order ID
-      final orderDoc = _firestore.collection('orders').doc(); // Global Order ID
+      final orderDoc = _firestore.collection('orders').doc(); 
       final orderId = orderDoc.id;
 
       final double totalPrice = cartItems.fold(0.0, (sum, item) => sum + ((item['Price'] ?? 0) * (item['quantity'] ?? 0)));
@@ -71,26 +71,43 @@ class DatabaseMethods {
         'userId': userId,
         'items': cartItems,
         'totalPrice': totalPrice,
-        'status': 'Pending', // Status: Pending -> Approved -> Shipped -> Delivered
+        'status': 'Pending',
         'timestamp': timestamp,
         'address': address, 
       };
 
-      // 2. WRITE: User's History (For their "My Orders" screen)
+      // 2. WRITE: User's History
       final userOrderRef = _firestore.collection('users').doc(userId).collection('orders').doc(orderId);
       batch.set(userOrderRef, orderData);
 
-      // 3. WRITE: Global Orderbook (For YOUR Admin Dashboard)
-      // 🚨 CRITICAL: Without this, you cannot see new orders!
+      // 3. WRITE: Global Orderbook
       batch.set(orderDoc, orderData);
 
-      // 4. UPDATE: Inventory
-      for (final productData in cartItems) {
-        final productId = productData['id'];
-        final quantity = productData['quantity'];
+      // 4. UPDATE: Inventory (Global + Admin Side)
+      for (final item in cartItems) {
+        final productId = item['id'];
+        final quantity = item['quantity'];
+        final adminId = item['adminId']; // <--- CRITICAL: Get Seller ID from item
+
+        // A. Global Product Registry Reference
+        final globalProductRef = _firestore.collection('products').doc(productId);
         
-        final productRef = _firestore.collection('products').doc(productId);
-        batch.update(productRef, {'inventory': FieldValue.increment(-quantity)});
+        // B. Admin/Seller Local Listing Reference
+        final adminListingRef = _firestore
+            .collection('Admin')
+            .doc(adminId)
+            .collection('listings')
+            .doc(productId);
+
+        // Queue Global Decrement
+        batch.update(globalProductRef, {
+          'inventory': FieldValue.increment(-quantity)
+        });
+
+        // Queue Seller Side Decrement (This was missing)
+        batch.update(adminListingRef, {
+          'inventory': FieldValue.increment(-quantity)
+        });
       }
 
       // 5. DELETE: Clear User's Cart
@@ -99,9 +116,11 @@ class DatabaseMethods {
         batch.delete(doc.reference);
       }
       
+      // 6. COMMIT ATOMICALLY
+      // If any part of this fails (e.g., admin doc doesn't exist), the whole order is cancelled.
       await batch.commit();
+      
       cartProvider.clearCart();
-
       return "Order placed successfully!";
 
     } catch (e) {

@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart'; // ✅ Added for performance
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ecommerce_shop/pages/product_details.dart';
 import 'package:flutter/material.dart';
@@ -50,6 +51,7 @@ class _CategoryProductsState extends State<CategoryProducts> {
         query = query.where('category', isEqualTo: widget.category);
       }
 
+      // Note: Ensure you have a Firestore Index for 'category' + 'Name'
       query = query.orderBy('Name').limit(_limit);
 
       if (_lastDocument != null) {
@@ -69,7 +71,7 @@ class _CategoryProductsState extends State<CategoryProducts> {
         }
       }
     } catch (e) {
-      print("Error loading category products: $e");
+      debugPrint("Error loading category products: $e");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -100,7 +102,7 @@ class _CategoryProductsState extends State<CategoryProducts> {
     );
   }
 
-  // 🔥 SHIMMER PRODUCT CARD (NEW)
+  // 🔥 SHIMMER PRODUCT CARD
   Widget _buildProductShimmer() {
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
@@ -208,29 +210,28 @@ class _CategoryProductsState extends State<CategoryProducts> {
         ),
         child: Row(
           children: [
+            // ✅ OPTIMIZED: Cached Network Image
             ClipRRect(
               borderRadius: BorderRadius.circular(10),
               child: Container(
                 color: Colors.grey[100],
-                child: Image.network(
-                  productData['Image'] ?? '',
+                child: CachedNetworkImage(
+                  imageUrl: productData['Image'] ?? '',
                   height: 100,
                   width: 100,
                   fit: BoxFit.cover,
-                  loadingBuilder: (context, child, progress) {
-                    if (progress == null) return child;
-                    return Container(
-                      height: 100,
-                      width: 100,
-                      color: Colors.grey[200],
-                      child: const Center(child: Icon(Icons.image, size: 30, color: Colors.grey)),
-                    );
-                  },
-                  errorBuilder: (context, error, stackTrace) => Container(
+                  placeholder: (context, url) => Container(
                     height: 100,
                     width: 100,
                     color: Colors.grey[200],
-                    child: const Icon(Icons.broken_image),
+                    child: const Center(
+                        child: Icon(Icons.image, size: 30, color: Colors.grey)),
+                  ),
+                  errorWidget: (context, url, error) => Container(
+                    height: 100,
+                    width: 100,
+                    color: Colors.grey[200],
+                    child: const Icon(Icons.broken_image, color: Colors.grey),
                   ),
                 ),
               ),
@@ -242,7 +243,8 @@ class _CategoryProductsState extends State<CategoryProducts> {
                 children: [
                   Text(
                     productData['Name'] ?? 'No Name',
-                    style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                    style: textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.bold),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -265,7 +267,8 @@ class _CategoryProductsState extends State<CategoryProducts> {
                 color: colorScheme.primary,
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 20),
+              child: const Icon(Icons.arrow_forward_ios,
+                  color: Colors.white, size: 20),
             ),
           ],
         ),
@@ -300,16 +303,19 @@ class _CategoryProductsState extends State<CategoryProducts> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.inventory_2_outlined, size: 64, color: Colors.grey[400]),
+                    Icon(Icons.inventory_2_outlined,
+                        size: 64, color: Colors.grey[400]),
                     const SizedBox(height: 16),
                     Text(
                       "No products found",
-                      style: textTheme.titleLarge?.copyWith(color: Colors.grey[600]),
+                      style: textTheme.titleLarge
+                          ?.copyWith(color: Colors.grey[600]),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       "in ${widget.category}",
-                      style: textTheme.bodyMedium?.copyWith(color: Colors.grey[500]),
+                      style: textTheme.bodyMedium
+                          ?.copyWith(color: Colors.grey[500]),
                     ),
                   ],
                 ),
@@ -318,15 +324,16 @@ class _CategoryProductsState extends State<CategoryProducts> {
           : ListView.builder(
               controller: _scrollController,
               padding: const EdgeInsets.all(20),
-              itemCount: _products.length + (_isLoading ? 3 : (_hasMore ? 1 : 0)), // 🔥 3 SHIMMERS
+              // Shows real products + shimmers at the bottom when loading more
+              itemCount:
+                  _products.length + (_isLoading ? 3 : (_hasMore ? 0 : 0)),
               itemBuilder: (context, index) {
-                // 🔥 SHIMMER LOADING (Last 3 indices)
                 if (index >= _products.length) {
                   return _buildProductShimmer();
                 }
 
-                // Real products
-                final productData = _products[index].data() as Map<String, dynamic>;
+                final productData =
+                    _products[index].data() as Map<String, dynamic>;
                 return _buildProductCard(productData);
               },
             ),
