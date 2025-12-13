@@ -10,10 +10,6 @@ class VerticalProductsList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final textTheme = theme.textTheme;
-
     return StreamBuilder<QuerySnapshot>(
       stream: stream,
       builder: (context, snapshot) {
@@ -53,6 +49,10 @@ class VerticalProductsList extends StatelessWidget {
     final name = productData['Name'] ?? 'Unnamed';
     final price = productData['Price'] ?? 0;
     final image = productData['Image'] ?? '';
+    
+    // ✅ OPTIMIZATION: Read directly from product document
+    final double rating = (productData['averageRating'] as num?)?.toDouble() ?? 0.0;
+    final int reviewCount = (productData['reviewCount'] as num?)?.toInt() ?? 0;
 
     return GestureDetector(
       onTap: () {
@@ -67,6 +67,7 @@ class VerticalProductsList extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Image Section
             ClipRRect(
               borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
               child: Image.network(
@@ -81,11 +82,14 @@ class VerticalProductsList extends StatelessWidget {
                 ),
               ),
             ),
+            
+            // Info Section
             Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Product Name
                   Text(
                     name,
                     style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
@@ -93,85 +97,45 @@ class VerticalProductsList extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 8),
-                  // Centered rating and price row
-                  _ProductRatingAndPrice(productId: productId, price: price),
+                  
+                  // Rating Row (Only show if there are reviews)
+                  if (reviewCount > 0) ...[
+                    Row(
+                      children: [
+                        RatingBarIndicator(
+                          rating: rating,
+                          itemBuilder: (context, index) => const Icon(
+                            Icons.star,
+                            color: Colors.amber,
+                          ),
+                          itemCount: 5,
+                          itemSize: 16.0,
+                          direction: Axis.horizontal,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          "($reviewCount)",
+                          style: textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+
+                  // Price (Highlighted)
+                  Text(
+                    '₹$price',
+                    style: textTheme.titleMedium?.copyWith(
+                      color: colorScheme.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ],
               ),
             ),
           ],
         ),
       ),
-    );
-  }
-}
-
-// A new widget for the rating and price that can handle its own stream
-class _ProductRatingAndPrice extends StatelessWidget {
-  final String productId;
-  final num price;
-
-  const _ProductRatingAndPrice({required this.productId, required this.price});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final textTheme = theme.textTheme;
-
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('products')
-          .doc(productId)
-          .collection('reviews')
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                '₹$price',
-                style: textTheme.titleMedium?.copyWith(
-                  color: colorScheme.primary,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          );
-        }
-
-        final reviews = snapshot.data!.docs;
-        double totalRating = 0;
-        for (var review in reviews) {
-          totalRating += (review.data() as Map)['rating'] as num? ?? 0;
-        }
-        final averageRating = reviews.isNotEmpty ? totalRating / reviews.length : 0.0;
-
-        return Column(
-          children: [
-            // Star rating centered
-            RatingBarIndicator(
-              rating: averageRating,
-              itemBuilder: (context, index) => const Icon(
-                Icons.star,
-                color: Colors.amber,
-              ),
-              itemCount: 5,
-              itemSize: 18.0,
-              direction: Axis.horizontal,
-            ),
-            const SizedBox(height: 4),
-            // Price centered
-            Text(
-              '₹$price',
-              style: textTheme.titleMedium?.copyWith(
-                color: colorScheme.primary,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        );
-      },
     );
   }
 }

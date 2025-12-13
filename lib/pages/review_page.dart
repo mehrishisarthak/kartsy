@@ -17,7 +17,6 @@ class _AddReviewPageState extends State<AddReviewPage> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _reviewController = TextEditingController();
   
-  // Initialize rating to 0 to detect if user touched it
   double _rating = 0; 
   bool _isLoading = false;
 
@@ -43,7 +42,6 @@ class _AddReviewPageState extends State<AddReviewPage> {
   Future<void> _submitReview() async {
     if (!_formKey.currentState!.validate()) return;
     
-    // 🚨 FIX: Ensure user selected a rating
     if (_rating == 0) {
       _showSnackBar("Please select a star rating.", isError: true);
       return;
@@ -62,20 +60,22 @@ class _AddReviewPageState extends State<AddReviewPage> {
       final productId = widget.productData['id'];
       if (productId == null) throw Exception("Product ID is missing.");
 
-      // Check existence using UserID as DocID (Fast & Secure)
+      // 1. Check for duplicate review (Prevent spam)
       final reviewDocRef = FirebaseFirestore.instance
           .collection('products')
           .doc(productId)
           .collection('reviews')
           .doc(userId);
 
-      if ((await reviewDocRef.get()).exists) {
+      final docSnap = await reviewDocRef.get();
+
+      if (docSnap.exists) {
         _showSnackBar("You have already reviewed this product.", isError: true);
         return;
       }
 
-      // NOTE: Ensure DatabaseMethods().addReview also updates 
-      // the product's 'averageRating' and 'reviewCount' atomically!
+      // 2. Submit to Database
+      // Note: Your DatabaseMethods().addReview must handle the 'averageRating' calculation!
       final result = await DatabaseMethods().addReview(
         productId: productId,
         userId: userId,
@@ -86,10 +86,13 @@ class _AddReviewPageState extends State<AddReviewPage> {
       _showSnackBar(result, isError: !result.contains("successfully"));
 
       if (mounted && result.contains("successfully")) {
-        Navigator.pop(context);
+        // Wait a moment for the snackbar to show, then close
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (mounted) Navigator.pop(context);
       }
     } catch (e) {
-      _showSnackBar("An unexpected error occurred: $e", isError: true);
+      _showSnackBar("An unexpected error occurred.", isError: true);
+      debugPrint("Review Error: $e");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -99,13 +102,16 @@ class _AddReviewPageState extends State<AddReviewPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final textTheme = theme.textTheme;
+    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: Text('Write a Review', style: textTheme.titleLarge),
-        backgroundColor: colorScheme.surface,
+        title: const Text('Write a Review'),
         centerTitle: true,
+        elevation: 0,
+        backgroundColor: colorScheme.surface,
+        foregroundColor: colorScheme.onSurface,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -114,13 +120,15 @@ class _AddReviewPageState extends State<AddReviewPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Product Name
               Text(
                 "Review for ${widget.productData['Name'] ?? 'Product'}",
-                style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 24),
               
-              Text('Your Rating:', style: textTheme.titleMedium),
+              // Rating Bar
+              Text('Your Rating:', style: theme.textTheme.titleMedium),
               const SizedBox(height: 12),
               Center(
                 child: RatingBar.builder(
@@ -130,12 +138,13 @@ class _AddReviewPageState extends State<AddReviewPage> {
                   allowHalfRating: false,
                   itemCount: 5,
                   itemSize: 40,
-                  glow: false, // Disables the glow effect for a cleaner look
+                  glow: false,
+                  unratedColor: isDark ? Colors.grey[700] : Colors.grey[300], // ✅ Better dark mode contrast
                   ignoreGestures: _isLoading, 
                   itemPadding: const EdgeInsets.symmetric(horizontal: 4.0),
-                  itemBuilder: (context, _) => Icon(
+                  itemBuilder: (context, _) => const Icon(
                     Icons.star,
-                    color: colorScheme.primary,
+                    color: Colors.amber, // Gold stars look better than primary color
                   ),
                   onRatingUpdate: (rating) {
                     setState(() => _rating = rating);
@@ -144,18 +153,25 @@ class _AddReviewPageState extends State<AddReviewPage> {
               ),
               const SizedBox(height: 30),
 
-              Text('Your Review:', style: textTheme.titleMedium),
+              // Text Field
+              Text('Your Review:', style: theme.textTheme.titleMedium),
               const SizedBox(height: 8),
               TextFormField(
                 controller: _reviewController,
                 maxLines: 5,
                 enabled: !_isLoading,
-                maxLength: 500, // Good practice to limit review length
+                maxLength: 500,
+                style: TextStyle(color: colorScheme.onSurface), // ✅ Input text color
                 decoration: InputDecoration(
                   hintText: 'Share your thoughts about this product...',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  hintStyle: TextStyle(color: Colors.grey[500]),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
                   filled: true,
-                  fillColor: Colors.grey[50],
+                  // ✅ Dynamic Background Color
+                  fillColor: isDark ? colorScheme.surfaceContainerHighest : Colors.grey[100],
                 ),
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
@@ -169,6 +185,7 @@ class _AddReviewPageState extends State<AddReviewPage> {
               ),
               const SizedBox(height: 30),
 
+              // Submit Button
               SizedBox(
                 width: double.infinity,
                 height: 55,
@@ -180,9 +197,14 @@ class _AddReviewPageState extends State<AddReviewPage> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12)
                     ),
+                    elevation: 2,
                   ),
                   icon: _isLoading
-                      ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      ? SizedBox(
+                          width: 24, 
+                          height: 24, 
+                          child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.onPrimary)
+                        )
                       : const Icon(Icons.send),
                   label: Text(
                     _isLoading ? "Submitting..." : "Submit Review",

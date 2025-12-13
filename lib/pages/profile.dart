@@ -1,56 +1,17 @@
 import 'dart:io';
-import 'package:cached_network_image/cached_network_image.dart'; // ✅ Added for performance
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ecommerce_shop/pages/order_screen.dart';
 import 'package:ecommerce_shop/pages/settings.dart';
 import 'package:ecommerce_shop/services/shared_preferences.dart';
 import 'package:ecommerce_shop/services/shimmer/profile_shimmer.dart';
+import 'package:ecommerce_shop/utils/region_config.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
-
-// ✅ Best Practice: Move static data outside the widget or to a separate constants.dart file
-const Map<String, List<String>> kIndianStatesAndCities = {
-  'Andaman and Nicobar Islands': ['Port Blair', 'Garacharma', 'Bambooflat'],
-  'Andhra Pradesh': ['Visakhapatnam', 'Vijayawada', 'Guntur', 'Tirupati', 'Nellore', 'Kurnool', 'Rajahmundry', 'Kakinada', 'Anantapur', 'Eluru', 'Kadapa', 'Chittoor', 'Srikakulam'],
-  'Arunachal Pradesh': ['Itanagar', 'Naharlagun', 'Tawang', 'Ziro', 'Bomdila', 'Pasighat'],
-  'Assam': ['Guwahati', 'Dibrugarh', 'Silchar', 'Jorhat', 'Tezpur', 'Nagaon', 'Tinsukia', 'Dispur'],
-  'Bihar': ['Patna', 'Gaya', 'Bhagalpur', 'Muzaffarpur', 'Darbhanga', 'Purnia', 'Arrah', 'Begusarai'],
-  'Chandigarh': ['Chandigarh'],
-  'Chhattisgarh': ['Raipur', 'Bhilai', 'Bilaspur', 'Korba', 'Durg', 'Rajnandgaon', 'Jagdalpur'],
-  'Dadra and Nagar Haveli and Daman and Diu': ['Daman', 'Diu', 'Silvassa', 'Amli'],
-  'Delhi': ['New Delhi', 'Delhi', 'Noida', 'Gurugram', 'Faridabad', 'Ghaziabad'],
-  'Goa': ['Panaji', 'Margao', 'Vasco da Gama', 'Mapusa', 'Ponda'],
-  'Gujarat': ['Ahmedabad', 'Surat', 'Vadodara', 'Rajkot', 'Gandhinagar', 'Bhavnagar', 'Jamnagar', 'Junagadh'],
-  'Haryana': ['Faridabad', 'Gurugram', 'Panipat', 'Ambala', 'Hisar', 'Rohtak', 'Karnal', 'Sonipat'],
-  'Himachal Pradesh': ['Shimla', 'Manali', 'Dharamshala', 'Kullu', 'Solan', 'Mandi', 'Palampur'],
-  'Jammu and Kashmir': ['Srinagar', 'Jammu', 'Anantnag', 'Baramulla', 'Udhampur', 'Kathua', 'Sopore'],
-  'Jharkhand': ['Ranchi', 'Jamshedpur', 'Dhanbad', 'Bokaro Steel City', 'Deoghar', 'Hazaribagh'],
-  'Karnataka': ['Bengaluru', 'Mysuru', 'Hubli-Dharwad', 'Mangaluru', 'Belagavi', 'Ballari', 'Shivamogga', 'Udupi'],
-  'Kerala': ['Thiruvananthapuram', 'Kochi', 'Kozhikode', 'Thrissur', 'Alappala', 'Kollam', 'Kannur', 'Palakkad'],
-  'Ladakh': ['Leh', 'Kargil'],
-  'Lakshadweep': ['Kavaratti', 'Agatti', 'Minicoy', 'Andrott'],
-  'Madhya Pradesh': ['Indore', 'Bhopal', 'Jabalpur', 'Gwalior', 'Ujjain', 'Sagar', 'Rewa', 'Satna'],
-  'Maharashtra': ['Mumbai', 'Pune', 'Nagpur', 'Nashik', 'Aurangabad', 'Thane', 'Solapur', 'Kolhapur'],
-  'Manipur': ['Imphal', 'Bishnupur', 'Thoubal', 'Churachandpur'],
-  'Meghalaya': ['Shillong', 'Cherrapunji', 'Tura', 'Jowai'],
-  'Mizoram': ['Aizawl', 'Lunglei', 'Champhai'],
-  'Nagaland': ['Kohima', 'Dimapur', 'Mokokchung', 'Wokha'],
-  'Odisha': ['Bhubaneswar', 'Cuttack', 'Rourkela', 'Puri', 'Sambalpur', 'Berhampur', 'Balasore'],
-  'Puducherry': ['Puducherry', 'Karaikal', 'Mahe', 'Yanam'],
-  'Punjab': ['Ludhiana', 'Amritsar', 'Jalandhar', 'Patiala', 'Bathinda', 'Mohali', 'Hoshiarpur'],
-  'Rajasthan': ['Jaipur', 'Jodhpur', 'Udaipur', 'Kota', 'Ajmer', 'Bikaner', 'Alwar', 'Bhilwara'],
-  'Sikkim': ['Gangtok', 'Pelling', 'Lachung', 'Namchi'],
-  'Tamil Nadu': ['Chennai', 'Coimbatore', 'Madurai', 'Tiruchirappalli', 'Salem', 'Tirunelveli', 'Erode', 'Vellore'],
-  'Telangana': ['Hyderabad', 'Warangal', 'Nizamabad', 'Karimnagar', 'Ramagundam', 'Khammam', 'Mahbubnagar'],
-  'Tripura': ['Agartala', 'Udaipur', 'Dharmanagar', 'Kailasahar'],
-  'Uttar Pradesh': ['Lucknow', 'Kanpur', 'Ghaziabad', 'Agra', 'Varanasi', 'Meerut', 'Prayagraj', 'Bareilly', 'Aligarh', 'Moradabad'],
-  'Uttarakhand': ['Dehradun', 'Haridwar', 'Roorkee', 'Nainital', 'Rishikesh', 'Haldwani', 'Kashipur'],
-  'West Bengal': ['Kolkata', 'Asansol', 'Siliguri', 'Durgapur', 'Howrah', 'Darjeeling', 'Kharagpur', 'Haldia'],
-};
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key, required this.userId});
@@ -70,8 +31,10 @@ class _ProfilePageState extends State<ProfilePage> {
 
   File? _imageFile;
   bool _isLoading = false;
+  bool _isPageLoading = true; // Handles parallel loading of Config + User Data
 
-  String? _selectedState, _selectedCity;
+  String? _selectedState;
+  String? _selectedCity;
   List<String> _cities = [];
 
   final TextEditingController _localAddressController = TextEditingController();
@@ -87,7 +50,7 @@ class _ProfilePageState extends State<ProfilePage> {
   void initState() {
     super.initState();
     userID = widget.userId;
-    loadUserData();
+    _initializePage(); 
 
     _localAddressController.addListener(_onFieldChanged);
     _pincodeController.addListener(_onFieldChanged);
@@ -99,6 +62,20 @@ class _ProfilePageState extends State<ProfilePage> {
       }
       _onFieldChanged();
     });
+  }
+
+  /// ✅ PARALLEL INITIALIZATION
+  /// 1. Fetches "Serviceable Areas" from your new RegionService
+  /// 2. Fetches "User Profile" from Firestore
+  Future<void> _initializePage() async {
+    await Future.wait([
+      RegionService.init(), 
+      _loadUserData(),      
+    ]);
+
+    if (mounted) {
+      setState(() => _isPageLoading = false);
+    }
   }
 
   void _onFieldChanged() {
@@ -113,7 +90,7 @@ class _ProfilePageState extends State<ProfilePage> {
     super.dispose();
   }
 
-  Future<void> loadUserData() async {
+  Future<void> _loadUserData() async {
     try {
       final cachedAddress = await _prefs.getUserAddress();
       if (cachedAddress != null && mounted) {
@@ -127,19 +104,40 @@ class _ProfilePageState extends State<ProfilePage> {
       
       if (doc.exists && mounted) {
         final firestoreData = doc.data()!;
-        setState(() {
-          personData = firestoreData;
-          _initialImage = firestoreData['Image'];
-        });
+        if (mounted) {
+           setState(() {
+            personData = firestoreData;
+            _initialImage = firestoreData['Image'];
+          });
+        }
         
         final address = firestoreData['Address'];
         if (address is Map<String, dynamic>) {
           _updateAddressFields(address, isInitialLoad: true);
+        } else {
+          _applyServiceableDefaults();
         }
       }
     } catch (e) {
       debugPrint("Error loading user data: $e");
-      if (mounted) _showErrorSnackBar("Failed to load user data");
+    }
+  }
+
+  /// ✅ SMART DEFAULT LOGIC:
+  /// Uses the dynamically fetched RegionService data to pre-fill 
+  /// the dropdowns if the user has no address set.
+  void _applyServiceableDefaults() {
+    if (RegionService.getStates().isNotEmpty) {
+      final defaultState = RegionService.getStates().first;
+      final defaultCities = RegionService.getCities(defaultState);
+      
+      setState(() {
+        _selectedState = defaultState;
+        _cities = defaultCities;
+        if (_cities.isNotEmpty) {
+          _selectedCity = _cities.first;
+        }
+      });
     }
   }
 
@@ -147,11 +145,25 @@ class _ProfilePageState extends State<ProfilePage> {
     final mobile = address['mobile'] ?? '';
 
     setState(() {
-      _selectedState = address['state'];
-      if (_selectedState != null) {
-        _cities = kIndianStatesAndCities[_selectedState] ?? [];
+      // ✅ DYNAMIC VALIDATION
+      String? loadedState = address['state'];
+      // Check if the loaded state is in our FETCHED serviceable list
+      if (loadedState != null && RegionService.getStates().contains(loadedState)) {
+        _selectedState = loadedState;
+        _cities = RegionService.getCities(_selectedState);
+      } else {
+        // Fallback to first available state
+        _applyServiceableDefaults();
       }
-      _selectedCity = address['city'];
+
+      // Check city validity
+      String? loadedCity = address['city'];
+      if (loadedCity != null && _cities.contains(loadedCity)) {
+        _selectedCity = loadedCity;
+      } else {
+        if (_cities.isNotEmpty) _selectedCity = _cities.first;
+      }
+
       _localAddressController.text = address['local'] ?? '';
       _pincodeController.text = address['pincode'] ?? '';
       _mobileController.text = mobile.replaceFirst('+91', '');
@@ -175,8 +187,7 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   bool _hasChanges() {
-    if (_initialAddress == null) return false;
-
+    if (_initialAddress == null) return true;
     if (_imageFile != null) return true;
 
     final currentMobile = _mobileController.text.trim().isEmpty ? null : '+91${_mobileController.text.trim()}';
@@ -421,7 +432,7 @@ class _ProfilePageState extends State<ProfilePage> {
         );
       }
       
-      await loadUserData();
+      await _loadUserData(); // Reload to refresh state
       
     } catch (e) {
       if (mounted) _showErrorSnackBar('Failed to save profile: ${e.toString()}');
@@ -486,6 +497,11 @@ class _ProfilePageState extends State<ProfilePage> {
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
 
+    // Show Shimmer while Config OR User Data is loading
+    if (_isPageLoading) {
+      return const Scaffold(body: ProfileShimmer());
+    }
+
     final bool hasChanges = _hasChanges();
     final bool isButtonDisabled = _isLoading || !hasChanges;
     final Color buttonColor = isButtonDisabled ? Colors.grey : colorScheme.primary;
@@ -494,14 +510,13 @@ class _ProfilePageState extends State<ProfilePage> {
     if (_imageFile != null) {
       imageProvider = FileImage(_imageFile!);
     } else if (personData?['Image'] != null && personData!['Image'].toString().isNotEmpty) {
-      // ✅ OPTIMIZED: Cached Network Image Provider
       imageProvider = CachedNetworkImageProvider(personData!['Image']);
     } else {
       imageProvider = const AssetImage('lib/assets/images/white.png');
     }
 
     return Scaffold(
-      resizeToAvoidBottomInset: true, // ✅ Ensures keyboard doesn't hide Save button
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         actions: [
           IconButton(
@@ -529,150 +544,158 @@ class _ProfilePageState extends State<ProfilePage> {
         ),
         title: const Text("Edit Profile"),
       ),
-      body: personData == null
-          ? const ProfileShimmer()
-          : SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(24, 24, 24, 100), 
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 100), 
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            GestureDetector(
+              onTap: _pickImage,
+              child: Stack(
+                alignment: Alignment.bottomRight,
                 children: [
-                  GestureDetector(
-                    onTap: _pickImage,
-                    child: Stack(
-                      alignment: Alignment.bottomRight,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: colorScheme.primary, width: 3),
-                            shape: BoxShape.circle,
-                          ),
-                          child: CircleAvatar(
-                            radius: 60,
-                            backgroundColor: colorScheme.surface,
-                            backgroundImage: imageProvider,
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            color: colorScheme.primary,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(Icons.edit, color: colorScheme.onPrimary, size: 20),
-                        ),
-                      ],
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: colorScheme.primary, width: 3),
+                      shape: BoxShape.circle,
+                    ),
+                    child: CircleAvatar(
+                      radius: 60,
+                      backgroundColor: colorScheme.surface,
+                      backgroundImage: imageProvider,
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    personData!['Name'] ?? 'No Name',
-                    style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    "Email: ${personData!['Email'] ?? 'Not Provided'}",
-                    style: textTheme.titleMedium?.copyWith(color: Colors.grey[700]),
-                  ),
-                  const SizedBox(height: 30),
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "Contact & Address Info",
-                            style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 20),
-                          TextFormField(
-                            controller: _mobileController,
-                            keyboardType: TextInputType.phone,
-                            readOnly: _isPhoneVerified,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly,
-                              LengthLimitingTextInputFormatter(10),
-                            ],
-                            decoration: InputDecoration(
-                              hintText: "98765 43210",
-                              prefixIcon: Icon(Icons.phone_android, color: colorScheme.primary),
-                              prefixText: "+91 ",
-                              fillColor: _isPhoneVerified ? Colors.grey.shade200.withAlpha(128) : null,
-                              filled: _isPhoneVerified,
-                              suffixIcon: TextButton(
-                                onPressed: _isPhoneVerified ? null : _verifyPhoneNumber,
-                                child: _isLoading
-                                    ? const SizedBox(
-                                        height: 20,
-                                        width: 20,
-                                        child: CircularProgressIndicator(strokeWidth: 2),
-                                      )
-                                    : _isPhoneVerified
-                                        ? Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              const Icon(Icons.check_circle, color: Colors.green),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                "Verified",
-                                                style: TextStyle(color: colorScheme.onSurface),
-                                              ),
-                                            ],
-                                          )
-                                        : Text(
-                                            "Verify",
-                                            style: TextStyle(color: colorScheme.primary),
-                                          ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          _buildDropdown(
-                            hint: "Select State",
-                            value: _selectedState,
-                            items: kIndianStatesAndCities.keys.toList(),
-                            onChanged: (newValue) {
-                              setState(() {
-                                _selectedState = newValue;
-                                _selectedCity = null;
-                                _cities = kIndianStatesAndCities[newValue] ?? [];
-                              });
-                            },
-                          ),
-                          const SizedBox(height: 16),
-                          _buildDropdown(
-                            hint: "Select City",
-                            value: _selectedCity,
-                            items: _cities,
-                            onChanged: _selectedState == null
-                                ? null
-                                : (newValue) => setState(() => _selectedCity = newValue),
-                          ),
-                          const SizedBox(height: 16),
-                          _buildTextField(
-                            controller: _localAddressController,
-                            hintText: "House No, Street, Landmark",
-                            icon: Icons.location_on_outlined,
-                          ),
-                          const SizedBox(height: 16),
-                          _buildTextField(
-                            controller: _pincodeController,
-                            hintText: "Pincode",
-                            icon: Icons.pin_drop_outlined,
-                            keyboardType: TextInputType.number,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly,
-                              LengthLimitingTextInputFormatter(6),
-                            ],
-                          ),
-                        ],
-                      ),
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary,
+                      shape: BoxShape.circle,
                     ),
+                    child: Icon(Icons.edit, color: colorScheme.onPrimary, size: 20),
                   ),
                 ],
               ),
             ),
+            const SizedBox(height: 12),
+            Text(
+              personData?['Name'] ?? 'User',
+              style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              "Email: ${personData?['Email'] ?? 'Not Provided'}",
+              style: textTheme.titleMedium?.copyWith(color: Colors.grey[700]),
+            ),
+            const SizedBox(height: 30),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Contact & Address Info",
+                      style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 20),
+                    TextFormField(
+                      controller: _mobileController,
+                      keyboardType: TextInputType.phone,
+                      readOnly: _isPhoneVerified,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(10),
+                      ],
+                      decoration: InputDecoration(
+                        hintText: "98765 43210",
+                        prefixIcon: Icon(Icons.phone_android, color: colorScheme.primary),
+                        prefixText: "+91 ",
+                        fillColor: _isPhoneVerified ? Colors.grey.shade200.withAlpha(128) : null,
+                        filled: _isPhoneVerified,
+                        suffixIcon: TextButton(
+                          onPressed: _isPhoneVerified ? null : _verifyPhoneNumber,
+                          child: _isLoading
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : _isPhoneVerified
+                                  ? Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.check_circle, color: Colors.green),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          "Verified",
+                                          style: TextStyle(color: colorScheme.onSurface),
+                                        ),
+                                      ],
+                                    )
+                                  : Text(
+                                      "Verify",
+                                      style: TextStyle(color: colorScheme.primary),
+                                    ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // ✅ FETCHED STATE DROPDOWN (Using RegionService)
+                    _buildDropdown(
+                      hint: "Select State",
+                      value: _selectedState,
+                      items: RegionService.getStates(),
+                      onChanged: (newValue) {
+                        setState(() {
+                          _selectedState = newValue;
+                          // Fetch cities for this state from Service
+                          _cities = RegionService.getCities(newValue);
+                          _selectedCity = null;
+                          
+                          // Auto-select if only 1 city
+                          if (_cities.length == 1) {
+                            _selectedCity = _cities.first;
+                          }
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // ✅ FETCHED CITY DROPDOWN (Using RegionService)
+                    _buildDropdown(
+                      hint: "Select City",
+                      value: _selectedCity,
+                      items: _cities,
+                      onChanged: _selectedState == null
+                          ? null
+                          : (newValue) => setState(() => _selectedCity = newValue),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildTextField(
+                      controller: _localAddressController,
+                      hintText: "House No, Street, Landmark",
+                      icon: Icons.location_on_outlined,
+                    ),
+                    const SizedBox(height: 16),
+                    _buildTextField(
+                      controller: _pincodeController,
+                      hintText: "Pincode",
+                      icon: Icons.pin_drop_outlined,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(6),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
       bottomNavigationBar: Container(
         padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
         decoration: BoxDecoration(

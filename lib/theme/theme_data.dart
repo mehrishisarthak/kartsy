@@ -67,6 +67,13 @@ ThemeData lightMode = ThemeData(
       borderSide: BorderSide(color: Colors.blue.shade400, width: 2.0),
     ),
   ),
+  // ✅ FIX: Smooth Page Transitions
+  pageTransitionsTheme: const PageTransitionsTheme(
+    builders: {
+      TargetPlatform.android: ZoomPageTransitionsBuilder(),
+      TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+    },
+  ),
   visualDensity: VisualDensity.adaptivePlatformDensity,
 );
 
@@ -134,6 +141,13 @@ ThemeData darkMode = ThemeData(
       borderRadius: BorderRadius.circular(12),
       borderSide: BorderSide(color: Colors.blue.shade300, width: 2.0),
     ),
+  ),
+  // ✅ FIX: Smooth Page Transitions
+  pageTransitionsTheme: const PageTransitionsTheme(
+    builders: {
+      TargetPlatform.android: ZoomPageTransitionsBuilder(),
+      TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+    },
   ),
   visualDensity: VisualDensity.adaptivePlatformDensity,
 );

@@ -1,69 +1,150 @@
-import 'package:ecommerce_shop/utils/database.dart';
+import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
 class CartProvider with ChangeNotifier {
-  final List<Map<String, dynamic>> _cart = [];
+  // Local cache of cart items
+  List<Map<String, dynamic>> _cart = [];
   List<Map<String, dynamic>> get cart => _cart;
 
-  void setCart(List<Map<String, dynamic>> items) {
-    _cart
-      ..clear()
-      ..addAll(items);
-    notifyListeners();
-  }
+  // Track loading state per item (for spinner on specific card)
+  final Map<String, bool> _loadingItems = {};
+  bool isItemLoading(String productId) => _loadingItems[productId] ?? false;
 
-  // ✅ UNIFIED AND SAFE addToCart METHOD
-  Future<void> addToCart(String userId, Map<String, dynamic> product) async {
-    final existingItemIndex = _cart.indexWhere((item) => item['id'] == product['id']);
+  // ✅ CRITICAL: Map to store active timers for each product
+  final Map<String, Timer> _debounceTimers = {};
 
-    if (existingItemIndex != -1) {
-      // Item already exists, so we safely increment its quantity.
-      final existingItem = _cart[existingItemIndex];
-      final currentQuantity = existingItem['quantity'] as int? ?? 0;
-      existingItem['quantity'] = currentQuantity + 1;
-    } else {
-      // Item is new, add it to the list with quantity 1.
-      final newItem = {
-        ...product, // Copies all data from the product
-        'quantity': 1,  // Ensures quantity is always present
-      };
-      _cart.add(newItem);
-    }
+  // ===========================================================================
+  // 1. SMART STREAM MERGE (Prevents "Jumping" Glitch)
+  // ===========================================================================
+  void updateCartFromStream(List<Map<String, dynamic>> streamCart) {
+    List<Map<String, dynamic>> mergedCart = [];
 
-    // Notify listeners to update the UI
-    notifyListeners();
+    for (var streamItem in streamCart) {
+      final productId = streamItem['id'];
 
-    // Sync the change with the database
-    await DatabaseMethods().addToCart(userId, product);
-  }
-
-  void updateQuantity(String productId, int delta) {
-    final idx = _cart.indexWhere((it) => it['id'] == productId);
-    if (idx != -1) {
-      final current = _cart[idx]['quantity'] as int? ?? 0;
-      final updated = current + delta;
-
-      if (updated <= 0) {
-        _cart.removeAt(idx);
+      // Check: Is the user currently modifying this item? (Is a timer active?)
+      if (_debounceTimers.containsKey(productId)) {
+        // YES: The user is clicking. Ignore the server update for this item.
+        // Keep our local optimistic version.
+        final localItem = _cart.firstWhere(
+          (item) => item['id'] == productId, 
+          orElse: () => streamItem
+        );
+        mergedCart.add(localItem);
       } else {
-        _cart[idx]['quantity'] = updated;
+        // NO: The user is idle. Trust the server data.
+        mergedCart.add(streamItem);
       }
+    }
+
+    _cart = mergedCart;
+    notifyListeners();
+  }
+
+  // ===========================================================================
+  // 2. DEBOUNCED QUANTITY UPDATE (1500ms Wait)
+  // ===========================================================================
+  Future<void> updateQuantity(String userId, String productId, int newQuantity, int stock) async {
+    // A. Optimistic Update (Instant UI Change)
+    final index = _cart.indexWhere((item) => item['id'] == productId);
+    if (index != -1) {
+      if (newQuantity > stock) return; // Prevent exceeding stock
+      // Note: We handle removal (quantity 0) in the UI or a separate remove function
+      
+      _cart[index]['quantity'] = newQuantity;
+      notifyListeners(); // Update UI immediately
+    }
+
+    // B. Cancel any existing timer for this product (Reset the clock)
+    if (_debounceTimers[productId]?.isActive ?? false) {
+      _debounceTimers[productId]!.cancel();
+    }
+
+    // C. Start a new timer (Wait 1.5 seconds)
+    // The presence of this timer tells `updateCartFromStream` to BACK OFF.
+    _debounceTimers[productId] = Timer(const Duration(milliseconds: 1500), () async {
+      
+      // D. Set Loading Indicator (Optional visual feedback)
+      _loadingItems[productId] = true;
       notifyListeners();
-    }
+
+      try {
+        // E. THE ACTUAL WRITE (Happens only once per sequence)
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userId)
+            .collection('cart')
+            .doc(productId)
+            .update({'quantity': newQuantity});
+            
+      } catch (e) {
+        debugPrint("Cart Sync Error: $e");
+        // Optional: Revert local state or show snackbar if server fails
+      } finally {
+        // F. CLEANUP
+        // Removing the timer allows the Stream to take over again as the "Source of Truth"
+        _loadingItems[productId] = false;
+        _debounceTimers.remove(productId); 
+        notifyListeners();
+      }
+    });
   }
 
-  void removeFromCart(String productId) {
-    _cart.removeWhere((it) => it['id'] == productId);
-    notifyListeners();
-  }
+  // ===========================================================================
+  // 3. STANDARD ADD TO CART (Initial Add)
+  // ===========================================================================
+  Future<void> addToCart(String userId, Map<String, dynamic> product) async {
+    final existingIndex = _cart.indexWhere((item) => item['id'] == product['id']);
 
-  void addItemAt(int index, Map<String, dynamic> item) {
-    if (index < 0 || index > _cart.length) {
-      _cart.add(item);
+    if (existingIndex != -1) {
+      // Item exists? Use the smart update logic
+      final currentQty = _cart[existingIndex]['quantity'] as int? ?? 1;
+      final stock = int.tryParse(product['inventory'].toString()) ?? 100;
+      await updateQuantity(userId, product['id'], currentQty + 1, stock);
     } else {
-      _cart.insert(index, item);
+      // Item is new? Add directly (no debounce needed for first add)
+      final newItem = {
+        ...product, 
+        'quantity': 1,
+        'addedAt': FieldValue.serverTimestamp(),
+      };
+      
+      // Optimistic Add
+      _cart.add(newItem);
+      notifyListeners();
+
+      try {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userId)
+            .collection('cart')
+            .doc(product['id'])
+            .set(newItem);
+      } catch (e) {
+        debugPrint("Add to Cart Error: $e");
+        _cart.removeWhere((item) => item['id'] == product['id']); // Revert on fail
+        notifyListeners();
+      }
     }
+  }
+
+  // ===========================================================================
+  // 4. HELPERS
+  // ===========================================================================
+
+  void removeFromCart(String userId, String productId) {
+    // Optimistic Remove
+    _cart.removeWhere((item) => item['id'] == productId);
     notifyListeners();
+
+    // Fire & Forget Delete
+    FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .collection('cart')
+        .doc(productId)
+        .delete();
   }
 
   double getTotalPrice() {
@@ -74,8 +155,19 @@ class CartProvider with ChangeNotifier {
     });
   }
   
+  void setCart(List<Map<String, dynamic>> items) {
+    // Only used for initial load or manual overrides
+    if (_debounceTimers.isEmpty) {
+      _cart = items;
+      notifyListeners();
+    }
+  }
+
   void clearCart() {
     _cart.clear();
+    // Cancel all timers to prevent late writes
+    _debounceTimers.forEach((key, timer) => timer.cancel());
+    _debounceTimers.clear();
     notifyListeners();
   }
 }

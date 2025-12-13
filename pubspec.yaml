@@ -56,16 +56,18 @@ flutter:
     - images/products/watch.png
     - images/listings/headphone.png
     - images/login.json
+    - images/fallback.json
     - images/emptyCart.json
     - images/error.json
     - images/shopping1.json
     - images/maintenance.json
     - images/shopping2.json
+    - images/emptyOrders.json
     - images/shopping3.json
     - lib/assets/images/default_profile.png
-    - lib/assets/images/app_icon.png
+    - lib/assets/images/application_icon.png
 
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "lib/assets/images/app_icon.png"
+  image_path: "lib/assets/images/application_icon.png"

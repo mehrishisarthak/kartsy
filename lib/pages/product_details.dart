@@ -1,11 +1,13 @@
-import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:ecommerce_shop/pages/profile.dart';
 import 'package:ecommerce_shop/services/cart_provider.dart';
+import 'package:ecommerce_shop/services/lead_provider.dart';
+import 'package:ecommerce_shop/services/shimmer/product_details_shimmer.dart';
+import 'package:ecommerce_shop/utils/constants.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:model_viewer_plus/model_viewer_plus.dart';
 import 'package:provider/provider.dart';
@@ -24,19 +26,16 @@ class _ProductDetailsState extends State<ProductDetails> {
   bool _isLoading = false;
   bool _show3D = false;
   int _currentImageIndex = 0;
-  
-  // No scroll controller needed here if we use the default PrimaryScrollController
-  
+
   // Review Pagination
   final List<DocumentSnapshot> _reviews = [];
   bool _isLoadingReviews = false;
   bool _hasMoreReviews = true;
   DocumentSnapshot? _lastReviewDoc;
-  static const int _reviewsPerBatch = 8; // Increased batch size slightly for slivers
+  static const int _reviewsPerBatch = 8;
 
-  // 3D Model Caching
-  File? _cachedModelFile;
-  bool _isModelCaching = false;
+  // Lead Interest State
+  bool _isAddingToInterests = false;
 
   @override
   void initState() {
@@ -44,26 +43,7 @@ class _ProductDetailsState extends State<ProductDetails> {
     _fetchReviews();
   }
 
-  // --- 1. ROBUST 3D MODEL CACHING ---
-  Future<void> _prepareModel(String url) async {
-    if (_cachedModelFile != null || _isModelCaching) return;
-    setState(() => _isModelCaching = true);
-
-    try {
-      final file = await DefaultCacheManager().getSingleFile(url);
-      if (mounted) {
-        setState(() {
-          _cachedModelFile = file;
-          _isModelCaching = false;
-        });
-      }
-    } catch (e) {
-      debugPrint("Error caching model: $e");
-      if (mounted) setState(() => _isModelCaching = false);
-    }
-  }
-
-  // --- 2. FETCH REVIEWS ---
+  // --- 1. FETCH REVIEWS ---
   Future<void> _fetchReviews() async {
     if (_isLoadingReviews || !_hasMoreReviews) return;
     if (mounted) setState(() => _isLoadingReviews = true);
@@ -95,7 +75,7 @@ class _ProductDetailsState extends State<ProductDetails> {
     }
   }
 
-  // --- 3. ADD TO CART ---
+  // --- 2. ADD TO CART ---
   Future<void> _handleAddToCart(Map<String, dynamic> productData) async {
     setState(() => _isLoading = true);
     try {
@@ -105,11 +85,11 @@ class _ProductDetailsState extends State<ProductDetails> {
       if (mounted) {
         await Provider.of<CartProvider>(context, listen: false)
             .addToCart(userId, productData);
-        
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text("✅ Added to cart!"), 
+              content: Text("✅ Added to cart!"),
               backgroundColor: Colors.green,
               behavior: SnackBarBehavior.floating,
             ),
@@ -120,7 +100,7 @@ class _ProductDetailsState extends State<ProductDetails> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Error: ${e.toString()}"), 
+            content: Text("Error: ${e.toString()}"),
             backgroundColor: Colors.red,
             behavior: SnackBarBehavior.floating,
           ),
@@ -131,86 +111,259 @@ class _ProductDetailsState extends State<ProductDetails> {
     }
   }
 
+  // --- 3. SMART LEAD GENERATION ---
+  Future<void> _handleAddToInterests(
+    BuildContext context,
+    Map<String, dynamic> productData,
+  ) async {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) {
+      _showSnackBar("You must be logged in to express interest.", isError: true);
+      return;
+    }
+
+    final leadsProvider = Provider.of<LeadsProvider>(context, listen: false);
+    if (leadsProvider.isProductInInterests(widget.productId)) {
+      _showSnackBar("Already in your interests!", isError: false);
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
+      final userData = userDoc.data();
+      final address = userData?['Address'] as Map<String, dynamic>?;
+
+      if (address == null ||
+          (address['state'] as String?)?.isEmpty == true ||
+          (address['city'] as String?)?.isEmpty == true ||
+          (address['mobile'] as String?)?.isEmpty == true) {
+        
+        _showSnackBar("Please complete your profile to contact sellers.", isError: true);
+
+        if (mounted) {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (context) => ProfilePage(userId: userId)),
+          );
+        }
+        return;
+      }
+
+      if (mounted) {
+        _showInterestDialog(context, userId, productData, userData, address);
+      }
+
+    } catch (e) {
+      _showSnackBar("Error verifying profile: $e", isError: true);
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _showInterestDialog(
+    BuildContext context,
+    String userId,
+    Map<String, dynamic> productData,
+    Map<String, dynamic>? userData,
+    Map<String, dynamic> address,
+  ) {
+    final emailController = TextEditingController(text: userData?['Email'] ?? '');
+    
+    String rawPhone = address['mobile'] ?? '';
+    if (rawPhone.startsWith('+91')) rawPhone = rawPhone.substring(3);
+    final phoneController = TextEditingController(text: rawPhone);
+
+    String? selectedCity = address['city'];
+    String? selectedState = address['state'];
+
+    final cities = ['Agartala', 'Delhi', 'Mumbai', 'Bangalore', 'Hyderabad', 'Chennai', 'Kolkata', 'Pune', 'Ahmedabad', 'Jaipur', 'Other'];
+    final states = ['Tripura', 'Delhi', 'Maharashtra', 'Karnataka', 'Telangana', 'Tamil Nadu', 'West Bengal', 'Uttar Pradesh', 'Gujarat', 'Rajasthan', 'Other'];
+
+    if (!cities.contains(selectedCity)) selectedCity = 'Other';
+    if (!states.contains(selectedState)) selectedState = 'Other';
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Interest'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Your details will be shared with the seller.', style: Theme.of(context).textTheme.bodySmall),
+              const SizedBox(height: 20),
+              TextField(controller: emailController, decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.email))),
+              const SizedBox(height: 12),
+              TextField(controller: phoneController, decoration: const InputDecoration(labelText: 'Phone', prefixIcon: Icon(Icons.phone))),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: selectedCity,
+                items: cities.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                onChanged: (v) => selectedCity = v,
+                decoration: const InputDecoration(labelText: 'City', prefixIcon: Icon(Icons.location_city)),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: selectedState,
+                items: states.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                onChanged: (v) => selectedState = v,
+                decoration: const InputDecoration(labelText: 'State', prefixIcon: Icon(Icons.map)),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          ElevatedButton(
+            onPressed: _isAddingToInterests ? null : () async {
+              if (emailController.text.isEmpty || phoneController.text.length != 10) {
+                _showSnackBar("Please check email and phone.", isError: true);
+                return;
+              }
+              setState(() => _isAddingToInterests = true);
+              try {
+                final result = await Provider.of<LeadsProvider>(context, listen: false).addLead(
+                  userId: userId,
+                  productId: widget.productId,
+                  productData: productData,
+                  userEmail: emailController.text.trim(),
+                  userPhone: phoneController.text.trim(),
+                  userName: userData?['Name'] ?? 'Customer',
+                  userCity: selectedCity!,
+                  userState: selectedState!,
+                );
+                if (mounted) {
+                  Navigator.pop(context);
+                  _showSnackBar(result, isError: false);
+                }
+              } catch (e) {
+                if (mounted) _showSnackBar("Error: $e", isError: true);
+              } finally {
+                if (mounted) setState(() => _isAddingToInterests = false);
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[600], foregroundColor: Colors.white),
+            child: _isAddingToInterests 
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+              : const Text("Send to Seller"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSnackBar(String message, {required bool isError}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Colors.red : Colors.green,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance.collection('products').doc(widget.productId).snapshots(),
       builder: (context, snapshot) {
+        // Use Shimmer when waiting for initial data
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          return const ProductDetailsShimmer();
         }
+        
         if (!snapshot.hasData || !snapshot.data!.exists) {
           return const Scaffold(body: Center(child: Text("Product not found.")));
         }
 
         final product = snapshot.data!.data() as Map<String, dynamic>;
-        
+
         // Data Extraction
         final int inventory = int.tryParse(product['inventory']?.toString() ?? '0') ?? 0;
         List<dynamic> rawImages = product['images'] ?? [];
-        if (rawImages.isEmpty && product['Image'] != null) rawImages = [product['Image']];
+        if (rawImages.isEmpty && product['Image'] != null) {
+          rawImages = [product['Image']];
+        }
         final List<String> imageUrls = rawImages.map((e) => e.toString()).toList();
-        
+
         final String? modelUrl = product['modelUrl'] ?? product['sketchfabUrl'];
         final bool has3DModel = modelUrl != null && modelUrl.isNotEmpty;
         final String? videoUrl = product['videoUrl'];
         final bool hasVideo = videoUrl != null && videoUrl.isNotEmpty;
+        final String category = product['category'] ?? '';
+        final bool isFurniture = category.toLowerCase() == 'furniture';
 
-        if (has3DModel && _cachedModelFile == null && !_isModelCaching) {
-          _prepareModel(modelUrl!);
-        }
+        // Overall Ratings Data
+        final double averageRating = (product['averageRating'] as num?)?.toDouble() ?? 0.0;
+        final int reviewCount = (product['reviewCount'] as num?)?.toInt() ?? 0;
 
         return Scaffold(
-          // Using CustomScrollView with Slivers for High Performance
           body: CustomScrollView(
             physics: const BouncingScrollPhysics(),
             slivers: [
-              // 1. App Bar
               SliverAppBar(
                 title: const Text("Product Details"),
                 centerTitle: true,
                 floating: true,
+                pinned: true, // Keep app bar visible
                 actions: [
+                  // 3D Toggle Button - Removed if no model
                   if (has3DModel)
-                    IconButton(
-                      icon: Icon(_show3D ? Icons.image : Icons.view_in_ar),
-                      onPressed: _isModelCaching ? null : () => setState(() => _show3D = !_show3D),
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8.0),
+                      child: IconButton(
+                        icon: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.primaryContainer,
+                            shape: BoxShape.circle
+                          ),
+                          child: Icon(
+                            _show3D ? Icons.image : Icons.view_in_ar, 
+                            color: Theme.of(context).colorScheme.primary,
+                            size: 20,
+                          ),
+                        ),
+                        tooltip: _show3D ? "Show Images" : "View in 3D",
+                        onPressed: () => setState(() => _show3D = !_show3D),
+                      ),
                     ),
                 ],
               ),
-
-              // 2. Product Visuals (Carousel / 3D)
               SliverToBoxAdapter(
                 child: SizedBox(
                   height: 350,
                   width: double.infinity,
                   child: Stack(
                     children: [
-                      _show3D && has3DModel
-                          ? (_cachedModelFile != null
-                              ? ModelViewer(
-                                  src: 'file://${_cachedModelFile!.path}',
-                                  alt: "A 3D model of ${product['Name']}",
-                                  ar: true,
-                                  autoRotate: true,
-                                  cameraControls: true,
-                                  backgroundColor: Colors.white,
-                                )
-                              : _buildLoadingState())
-                          : _buildImageCarousel(imageUrls),
+                      // ✅ 3D MODEL VIEWER (Direct URL - No Local Caching)
+                      if (_show3D && has3DModel)
+                        ModelViewer(
+                          src: modelUrl!, // Pass remote URL directly
+                          alt: "A 3D model of ${product['Name']}",
+                          ar: true,
+                          autoRotate: true,
+                          cameraControls: true,
+                          backgroundColor: Colors.white,
+                          arModes: const ['scene-viewer', 'webxr', 'quick-look'], // Standard AR modes
+                        )
+                      else
+                        _buildImageCarousel(imageUrls),
 
-                      if (_show3D && has3DModel && _cachedModelFile != null)
+                      if (_show3D && has3DModel)
                         Positioned(
-                          top: 10,
-                          right: 10,
-                          child: _buildARBadge(),
+                          bottom: 20, 
+                          left: 0, 
+                          right: 0, 
+                          child: Center(child: _buildARBadge())
                         ),
                     ],
                   ),
                 ),
               ),
-
-              // 3. Product Info (Title, Price, Desc, Video)
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.all(20),
@@ -225,38 +378,71 @@ class _ProductDetailsState extends State<ProductDetails> {
                       Text(
                         '₹${product['Price'] ?? '--'}',
                         style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.w900,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
+                              fontWeight: FontWeight.w900,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
                       ),
                       const SizedBox(height: 10),
-                      _buildSummaryRating(product),
+                      _buildSummaryRating(averageRating, reviewCount),
                       const SizedBox(height: 20),
-                      
                       Text('Details', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
                       const SizedBox(height: 10),
                       Text(
                         product['Description'] ?? "No description provided.",
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Colors.grey[700], height: 1.5),
                       ),
-                      
                       if (hasVideo) ...[
                         const SizedBox(height: 30),
                         Text('Product Video', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
                         const SizedBox(height: 15),
-                        ProductVideoPlayer(videoUrl: videoUrl!),
+                        ProductVideoPlayer(videoUrl: videoUrl),
                       ],
                       const SizedBox(height: 30),
-                      
                       Text('Customer Reviews', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 15),
+
+                      // Overall Rating Summary Card
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primary.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Theme.of(context).colorScheme.primary.withOpacity(0.1)),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Column(
+                              children: [
+                                Text(
+                                  averageRating.toStringAsFixed(1),
+                                  style: TextStyle(
+                                    fontSize: 36,
+                                    fontWeight: FontWeight.bold,
+                                    color: Theme.of(context).colorScheme.primary,
+                                  ),
+                                ),
+                                RatingBarIndicator(
+                                  rating: averageRating,
+                                  itemBuilder: (context, index) => const Icon(Icons.star, color: Colors.amber),
+                                  itemCount: 5,
+                                  itemSize: 20.0,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  "$reviewCount Ratings",
+                                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
                     ],
                   ),
                 ),
               ),
-
-              // 4. Optimized Review List
-              // If no reviews, show empty state in a box adapter
               if (_reviews.isEmpty && !_isLoadingReviews)
                 const SliverToBoxAdapter(
                   child: Center(
@@ -273,7 +459,6 @@ class _ProductDetailsState extends State<ProductDetails> {
                   ),
                 )
               else
-                // High performance rendering of reviews
                 SliverList(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
@@ -286,8 +471,6 @@ class _ProductDetailsState extends State<ProductDetails> {
                     childCount: _reviews.length,
                   ),
                 ),
-
-              // 5. Load More / Loading Shimmer
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.all(20),
@@ -295,21 +478,22 @@ class _ProductDetailsState extends State<ProductDetails> {
                     children: [
                       if (_isLoadingReviews)
                         Column(children: List.generate(2, (index) => _buildReviewShimmer())),
-                      
                       if (_hasMoreReviews && !_isLoadingReviews && _reviews.isNotEmpty)
                         TextButton.icon(
                           onPressed: _fetchReviews,
                           icon: const Icon(Icons.arrow_downward_rounded, size: 18),
                           label: const Text("Load More Reviews"),
                         ),
-                      const SizedBox(height: 80), // Bottom padding for FAB/Button
+                      const SizedBox(height: 80),
                     ],
                   ),
                 ),
               ),
             ],
           ),
-          bottomNavigationBar: _buildBottomBar(context, inventory, product),
+          bottomNavigationBar: isFurniture
+              ? _buildLeadGenerationBottomBar(context, product)
+              : _buildAddToCartBottomBar(context, inventory, product),
         );
       },
     );
@@ -317,28 +501,22 @@ class _ProductDetailsState extends State<ProductDetails> {
 
   // --- Sub-Widgets ---
 
-  Widget _buildLoadingState() {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+  Widget _buildARBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(20)),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 10),
-          Text("Downloading 3D Asset..."),
+          Icon(Icons.view_in_ar, color: Colors.white, size: 16),
+          SizedBox(width: 8),
+          Text("Tap the AR icon to view in your room", style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
         ],
       ),
     );
   }
 
-  Widget _buildARBadge() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(4)),
-      child: const Text("Tap AR icon to place in room", style: TextStyle(color: Colors.white, fontSize: 10)),
-    );
-  }
-
-  Widget _buildBottomBar(BuildContext context, int inventory, Map<String, dynamic> product) {
+  Widget _buildAddToCartBottomBar(BuildContext context, int inventory, Map<String, dynamic> product) {
     final colorScheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(20),
@@ -352,9 +530,7 @@ class _ProductDetailsState extends State<ProductDetails> {
           child: ElevatedButton(
             onPressed: inventory == 0 || _isLoading ? null : () => _handleAddToCart(product),
             style: ElevatedButton.styleFrom(
-              backgroundColor: inventory == 0
-                  ? Colors.red
-                  : (inventory < 10 ? Colors.amber : colorScheme.primary),
+              backgroundColor: inventory == 0 ? Colors.red : (inventory < 10 ? Colors.amber : colorScheme.primary),
               foregroundColor: inventory == 0 || inventory < 10 ? Colors.white : colorScheme.onPrimary,
             ),
             child: _isLoading
@@ -369,9 +545,30 @@ class _ProductDetailsState extends State<ProductDetails> {
     );
   }
 
-  Widget _buildSummaryRating(Map<String, dynamic> product) {
-    double rating = (product['averageRating'] as num?)?.toDouble() ?? 0.0;
-    int count = (product['reviewCount'] as num?)?.toInt() ?? 0;
+  Widget _buildLeadGenerationBottomBar(BuildContext context, Map<String, dynamic> product) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        boxShadow: [BoxShadow(color: Colors.black.withAlpha(25), blurRadius: 10, offset: const Offset(0, -4))],
+      ),
+      child: SafeArea(
+        child: SizedBox(
+          height: 55,
+          child: ElevatedButton(
+            onPressed: _isAddingToInterests ? null : () => _handleAddToInterests(context, product),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[600], foregroundColor: Colors.white),
+            child: _isAddingToInterests
+                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                : const Text("I'm Interested in This Product", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSummaryRating(double rating, int count) {
     if (count == 0) return const SizedBox();
     return Row(
       children: [
@@ -398,6 +595,7 @@ class _ProductDetailsState extends State<ProductDetails> {
               viewportFraction: 1.0,
               enableInfiniteScroll: images.length > 1,
               onPageChanged: (index, reason) {
+                // Ensure state update doesn't crash if widget disposed
                 if (mounted) setState(() => _currentImageIndex = index);
               },
             ),
@@ -411,7 +609,9 @@ class _ProductDetailsState extends State<ProductDetails> {
                   highlightColor: Colors.grey[100]!,
                   child: Container(color: Colors.white),
                 ),
-                errorWidget: (context, url, error) => Container(color: Colors.grey[200], child: const Icon(Icons.error, color: Colors.grey)),
+                errorWidget: (context, url, error) => Container(
+                    color: Colors.grey[200],
+                    child: const Icon(Icons.error, color: Colors.grey)),
               );
             }).toList(),
           ),
@@ -421,7 +621,8 @@ class _ProductDetailsState extends State<ProductDetails> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: images.asMap().entries.map((entry) {
               return Container(
-                width: 8.0, height: 8.0,
+                width: 8.0,
+                height: 8.0,
                 margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
@@ -472,7 +673,7 @@ class _ProductDetailsState extends State<ProductDetails> {
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance.collection('users').doc(userId).snapshots(),
       builder: (context, snapshot) {
-        String userImage = "https://firebasestorage.googleapis.com/v0/b/kartsyapp-87532.firebasestorage.app/o/default_profile.png?alt=media&token=d328f93c-400f-4deb-a0e8-014eb2e2b795";
+        String userImage = AppConstants.defaultProfileImage; 
         String userName = 'Anonymous User';
 
         if (snapshot.hasData && snapshot.data!.exists) {
@@ -536,7 +737,7 @@ class _ProductVideoPlayerState extends State<ProductVideoPlayer> {
   void initState() {
     super.initState();
     final videoId = YoutubePlayer.convertUrlToId(widget.videoUrl);
-    
+
     _controller = YoutubePlayerController(
       initialVideoId: videoId ?? '',
       flags: const YoutubePlayerFlags(

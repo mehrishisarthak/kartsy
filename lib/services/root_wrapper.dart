@@ -3,7 +3,7 @@ import 'package:ecommerce_shop/pages/bottomnav.dart';
 import 'package:ecommerce_shop/pages/login.dart';
 import 'package:ecommerce_shop/pages/maintenance_screen.dart';
 import 'package:ecommerce_shop/pages/onboarding.dart';
-import 'package:ecommerce_shop/services/shimmer/root_wrapper_shimemr.dart';
+import 'package:ecommerce_shop/services/shimmer/root_wrapper_shimemr.dart'; // Ensure filename matches
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -32,7 +32,9 @@ class _RootWrapperState extends State<RootWrapper> {
   Future<void> _completeOnboarding() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('seenOnboarding', true);
-    setState(() => _showOnboarding = false);
+    if (mounted) {
+      setState(() => _showOnboarding = false);
+    }
   }
 
   @override
@@ -41,40 +43,39 @@ class _RootWrapperState extends State<RootWrapper> {
       return OnboardingScreen(onComplete: _completeOnboarding);
     }
 
-    // Check maintenance mode first
+    // 1. Check Maintenance Mode First
     return FutureBuilder<bool>(
       future: _isMaintenanceMode(),
       builder: (context, maintenanceSnapshot) {
+        // Show shimmer while checking maintenance status
         if (maintenanceSnapshot.connectionState == ConnectionState.waiting) {
-          return const RootWrapperLoading(); // full-screen shimmer
+          return const RootWrapperLoading();
         }
 
-        if (maintenanceSnapshot.hasError) {
-          return const Scaffold(
-            body: Center(child: Text('Error checking app status')),
-          );
-        }
-
+        // If explicitly in maintenance mode, block access
         if (maintenanceSnapshot.data == true) {
           return const MaintenanceScreen();
         }
 
-        // Otherwise, proceed with auth check
+        // 2. If not maintenance, proceed with Auth Check
         return StreamBuilder<User?>(
           stream: FirebaseAuth.instance.authStateChanges(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return const RootWrapperLoading(); // same shimmer while auth resolves
+              return const RootWrapperLoading();
             }
 
             final user = snapshot.data;
 
             if (user != null) {
+              // 3. Optional: Enforce Email Verification
               if (!user.emailVerified) {
                 return const LoginPage();
               }
+              // User valid -> Go to Home
               return BottomBar(userId: user.uid);
             } else {
+              // No user -> Go to Login
               return const LoginPage();
             }
           },
@@ -83,23 +84,22 @@ class _RootWrapperState extends State<RootWrapper> {
     );
   }
 
+  /// Checks Firestore for a global 'maintenance' flag.
+  /// Returns false if offline or error (Fail-Open strategy).
   Future<bool> _isMaintenanceMode() async {
     try {
       final doc = await FirebaseFirestore.instance
           .collection('controls')
-          .doc('KiZGQexgPCX2mWgplm15')
-          .get();
+          .doc('maintenance') // ✅ Standardized ID (create this in Firestore)
+          .get()
+          .timeout(const Duration(seconds: 3)); // ✅ 3s Timeout prevents hanging
 
-      print('controls doc exists: ${doc.exists}');
-      print('controls data: ${doc.data()}');
+      if (!doc.exists) return false;
 
-      final flag = doc.data()?['maintenance'] as bool? ?? false;
-      print('maintenance flag: $flag');
-
-      return flag;
+      return doc.data()?['maintenance'] as bool? ?? false;
     } catch (e) {
-      print("Error checking maintenance mode: $e");
-      return false;
+      debugPrint("Maintenance check warning (likely offline): $e");
+      return false; // Allow access if check fails
     }
   }
 }

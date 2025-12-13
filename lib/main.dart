@@ -1,6 +1,8 @@
 import 'package:ecommerce_shop/firebase_options.dart';
+import 'package:ecommerce_shop/pages/splashscreen.dart';
 import 'package:ecommerce_shop/services/cart_provider.dart';
-import 'package:ecommerce_shop/services/root_wrapper.dart';
+import 'package:ecommerce_shop/services/lead_provider.dart'; // ✅ ADDED: Lead Provider
+import 'package:ecommerce_shop/services/root_wrapper.dart'; // Ensure this path is correct based on your folder structure
 import 'package:ecommerce_shop/theme/theme_data.dart';
 import 'package:ecommerce_shop/theme/theme_provider.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -15,7 +17,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 1. Lock Orientation
+  // 1. Lock Orientation to Portrait
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
   ]);
@@ -27,19 +29,23 @@ void main() async {
   ));
 
   try {
+    // 3. Initialize Firebase
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
 
-    // 3. Security: Dynamic App Check (Debug vs Production)
+    // 4. Security: Activate App Check
+    // Note: Ensure you have registered your SHA-256 keys in Firebase Console
     await FirebaseAppCheck.instance.activate(
       androidProvider: kReleaseMode
           ? AndroidProvider.playIntegrity
           : AndroidProvider.debug,
-      appleProvider: kReleaseMode ? AppleProvider.appAttest : AppleProvider.debug,
+      appleProvider: kReleaseMode 
+          ? AppleProvider.appAttest 
+          : AppleProvider.debug,
     );
 
-    // 4. Performance: Pre-load Onboarding Status
+    // 5. Performance: Pre-load Onboarding Status
     final prefs = await SharedPreferences.getInstance();
     final bool hasSeenOnboarding = prefs.getBool('seenOnboarding') ?? false;
 
@@ -48,11 +54,13 @@ void main() async {
         providers: [
           ChangeNotifierProvider(create: (_) => CartProvider()),
           ChangeNotifierProvider(create: (_) => ThemeProvider()),
+          ChangeNotifierProvider(create: (_) => LeadsProvider()), // ✅ Critical for Furniture Leads
         ],
         child: MyApp(startWithOnboarding: !hasSeenOnboarding),
       ),
     );
   } catch (e) {
+    // Fail Gracefully
     runApp(const FirebaseErrorApp());
   }
 }
@@ -68,12 +76,18 @@ class MyApp extends StatelessWidget {
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Kartsy',
+      title: 'virTwirl', // ✅ RENAMED: App Title
+      
+      // 🎨 Theme Configuration
       theme: lightMode,
       darkTheme: darkMode,
       themeMode: themeProvider.themeMode,
-      // --- FIX: Named routes for proper navigation after auth ---
-      home: RootWrapper(showOnboarding: startWithOnboarding),
+      
+      // 🚀 Navigation Logic
+      // Start with Splash Screen instead of RootWrapper directly
+      home: const SplashScreen(), 
+      
+      // ✅ Named Routes (Critical for Login/Signup navigation)
       routes: {
         '/home': (context) => RootWrapper(showOnboarding: startWithOnboarding),
       },
@@ -81,6 +95,7 @@ class MyApp extends StatelessWidget {
   }
 }
 
+// --- Fallback App if Firebase Fails ---
 class FirebaseErrorApp extends StatelessWidget {
   const FirebaseErrorApp({super.key});
 
@@ -94,6 +109,7 @@ class FirebaseErrorApp extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              // Ensure you have error.json in your assets
               Lottie.asset(
                 'images/error.json',
                 width: 200,
@@ -104,7 +120,13 @@ class FirebaseErrorApp extends StatelessWidget {
               const SizedBox(height: 20),
               const Text(
                 'Server Initialization Failed',
-                style: TextStyle(fontSize: 24, color: Colors.red),
+                style: TextStyle(fontSize: 24, color: Colors.red, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Please check your internet connection\nand restart the app.',
+                style: TextStyle(fontSize: 14, color: Colors.grey),
                 textAlign: TextAlign.center,
               ),
             ],

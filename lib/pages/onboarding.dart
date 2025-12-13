@@ -44,7 +44,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     ),
     const OnboardingItem(
       imagePath: 'images/shopping3.json',
-      title: 'Join the Kartsy Community',
+      title: 'Join the virTwirl Community', // Updated text to match branding
       description: 'Become part of a vibrant community of shoppers and sellers. Your next favorite thing awaits.',
     ),
   ];
@@ -55,18 +55,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     super.dispose();
   }
 
-  // --- FIXED: Handle onboarding completion with callback OR navigation ---
   Future<void> _completeOnboarding() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('seenOnboarding', true);
 
     if (!mounted) return;
 
-    // If callback provided (from RootWrapper), use it to rebuild
     if (widget.onComplete != null) {
       widget.onComplete!();
     } else {
-      // Fallback: Navigate to SignupPage (for direct launches)
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const SignupPage()),
@@ -76,83 +73,130 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     final isLastPage = _currentPageIndex == _onboardingData.length - 1;
 
     return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: Stack(
         children: [
-          PageView.builder(
-            controller: _controller,
-            itemCount: _onboardingData.length,
-            onPageChanged: (index) {
-              setState(() {
-                _currentPageIndex = index;
-              });
-            },
-            itemBuilder: (context, index) {
-              return OnboardingPage(
-                item: _onboardingData[index],
-                isActive: index == _currentPageIndex,
-              );
-            },
+          // 1. Main PageView Carousel
+          // We add padding at the top so the content doesn't overlap the fixed header
+          Padding(
+            padding: const EdgeInsets.only(top: 60.0), 
+            child: PageView.builder(
+              controller: _controller,
+              itemCount: _onboardingData.length,
+              onPageChanged: (index) {
+                setState(() {
+                  _currentPageIndex = index;
+                });
+              },
+              itemBuilder: (context, index) {
+                return OnboardingPage(
+                  item: _onboardingData[index],
+                  isActive: index == _currentPageIndex,
+                );
+              },
+            ),
           ),
-          // Navigation Controls
+
+          // 2. Fixed Branding Header (Top Left)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+                child: Row(
+                  children: [
+                    // Icon Logo (Optional, removed to keep it text-only as requested)
+                    // Icon(Icons.view_in_ar_rounded, color: colorScheme.primary, size: 24),
+                    // SizedBox(width: 8),
+                    
+                    // BRANDING TEXT
+                    Text(
+                      'virTwirl',
+                      style: GoogleFonts.poppins(
+                        fontSize: 24, // Prominent size
+                        fontWeight: FontWeight.bold, // Bold like logo
+                        color: colorScheme.primary, // Accent Blue
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // 3. Navigation Controls (Bottom)
           Positioned(
             bottom: 30.0,
             left: 20.0,
             right: 20.0,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // Skip Button
-                TextButton(
-                  onPressed: _completeOnboarding,
-                  child: Text(
-                    'Skip',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w500,
-                      color: Colors.grey,
+            child: SafeArea(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // Skip Button
+                  TextButton(
+                    onPressed: _completeOnboarding,
+                    child: Text(
+                      'Skip',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey,
+                      ),
                     ),
                   ),
-                ),
-                // Dot Indicator
-                // Dot Indicator
-SmoothPageIndicator(
-  controller: _controller,
-  count: _onboardingData.length,
-  effect: WormEffect(
-    spacing: 12,
-    dotColor: Colors.blue.shade200, // Light blue for inactive dots
-    activeDotColor: Colors.blue.shade600, // Kartsy blue for active dot
-  ),
-),
-                // Next/Get Started Button
-                SizedBox(
-                  width: 80,
-                  child: isLastPage
-                      ? TextButton(
-                          onPressed: _completeOnboarding,
-                          child: Text(
-                            'Done',
-                            style: GoogleFonts.poppins(
-                              fontWeight: FontWeight.bold,
-                              color: Theme.of(context).primaryColor,
+
+                  // Dot Indicator
+                  SmoothPageIndicator(
+                    controller: _controller,
+                    count: _onboardingData.length,
+                    effect: WormEffect(
+                      spacing: 12,
+                      dotWidth: 10,
+                      dotHeight: 10,
+                      dotColor: colorScheme.primary.withOpacity(0.3), // Light blue
+                      activeDotColor: colorScheme.primary, // Accent Blue
+                    ),
+                  ),
+
+                  // Next / Done Button
+                  SizedBox(
+                    width: 80,
+                    child: isLastPage
+                        ? TextButton(
+                            onPressed: _completeOnboarding,
+                            child: Text(
+                              'Done',
+                              style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.primary,
+                              ),
                             ),
+                          )
+                        : IconButton(
+                            icon: Icon(
+                              Icons.arrow_forward_ios,
+                              color: colorScheme.primary,
+                            ),
+                            onPressed: () {
+                              _controller.nextPage(
+                                duration: const Duration(milliseconds: 400),
+                                curve: Curves.easeInOut,
+                              );
+                            },
                           ),
-                        )
-                      : IconButton(
-                          icon: const Icon(Icons.arrow_forward_ios),
-                          onPressed: () {
-                            _controller.nextPage(
-                              duration: const Duration(milliseconds: 400),
-                              curve: Curves.easeInOut,
-                            );
-                          },
-                        ),
-                ),
-              ],
+                  ),
+                ],
+              ),
             ),
-          )
+          ),
         ],
       ),
     );
@@ -173,16 +217,18 @@ class OnboardingPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final backgroundColor = theme.scaffoldBackgroundColor;
+    final colorScheme = theme.colorScheme;
 
     final titleStyle = GoogleFonts.poppins(
       textStyle: theme.textTheme.headlineSmall,
       fontWeight: FontWeight.bold,
+      color: theme.textTheme.titleLarge?.color, // Ensure readable text in dark mode
     );
 
     final descriptionStyle = GoogleFonts.poppins(
       textStyle: theme.textTheme.bodyMedium,
       color: Colors.grey[600],
+      height: 1.5,
     );
 
     return Column(
@@ -195,8 +241,13 @@ class OnboardingPage extends StatelessWidget {
             child: Lottie.asset(
               item.imagePath,
               animate: isActive,
+              // Fallback icon if Lottie fails
               errorBuilder: (context, error, stackTrace) {
-                return Icon(Icons.shopping_bag, size: 100, color: Colors.grey[300]);
+                return Icon(
+                  Icons.shopping_bag_outlined, 
+                  size: 100, 
+                  color: colorScheme.primary.withOpacity(0.3)
+                );
               },
             ),
           ),
@@ -207,13 +258,10 @@ class OnboardingPage extends StatelessWidget {
           child: Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 40.0),
-            decoration: BoxDecoration(
-              color: backgroundColor,
-            ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.start,
               children: [
-                const SizedBox(height: 20),
+                const SizedBox(height: 10),
                 Text(
                   item.title,
                   textAlign: TextAlign.center,

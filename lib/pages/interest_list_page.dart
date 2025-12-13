@@ -1,0 +1,311 @@
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:ecommerce_shop/pages/product_details.dart';
+import 'package:ecommerce_shop/pages/review_page.dart';
+import 'package:flutter/material.dart';
+import 'package:lottie/lottie.dart';
+import 'package:shimmer/shimmer.dart';
+
+class InterestListPage extends StatefulWidget {
+  final String userId;
+  const InterestListPage({super.key, required this.userId});
+
+  @override
+  State<InterestListPage> createState() => _InterestListPageState();
+}
+
+class _InterestListPageState extends State<InterestListPage> {
+  
+  // ✅ Function to remove interest directly from Firestore (User's Copy)
+  Future<void> _removeInterest(String docId) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.userId)
+          .collection('leads')
+          .doc(docId)
+          .delete();
+          
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Removed from interests"),
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint("Error removing interest: $e");
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Scaffold(
+      // ✅ FIX 1: Use Theme Background
+      backgroundColor: theme.scaffoldBackgroundColor, 
+      appBar: AppBar(
+        title: Text(
+          'My Interests',
+          style: textTheme.headlineSmall?.copyWith(
+            color: colorScheme.primary,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        centerTitle: true,
+        elevation: 0,
+        backgroundColor: theme.scaffoldBackgroundColor, // ✅ Match Scaffold
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, color: colorScheme.primary),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('users')
+            .doc(widget.userId)
+            .collection('leads')
+            .orderBy('timestamp', descending: true)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return _buildShimmerList(isDark);
+          }
+
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Lottie.asset(
+                    'images/fallback.json',
+                    height: 250,
+                    repeat: true,
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    'No interests yet!',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      // ✅ FIX 2: Dynamic Text Color
+                      color: isDark ? Colors.grey[400] : Colors.grey[600],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Items you inquire about will appear here.',
+                    style: TextStyle(color: isDark ? Colors.grey[600] : Colors.grey[500]),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          final leads = snapshot.data!.docs;
+
+          return ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: leads.length,
+            physics: const BouncingScrollPhysics(),
+            itemBuilder: (context, index) {
+              final leadDoc = leads[index];
+              final leadData = leadDoc.data() as Map<String, dynamic>;
+              final String productId = leadData['productId'] ?? ''; 
+              
+              return _buildInterestCard(
+                context, 
+                leadData, 
+                docId: leadDoc.id, 
+                productId: productId,
+                theme: theme, // Pass theme
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildInterestCard(
+    BuildContext context, 
+    Map<String, dynamic> data, 
+    {required String docId, required String productId, required ThemeData theme}
+  ) {
+    String status = data['status'] ?? 'New';
+    bool isWon = status == 'Won';
+    
+    Color statusColor;
+    switch (status) {
+      case 'Won': statusColor = Colors.green; break;
+      case 'Lost': statusColor = Colors.red; break;
+      case 'Contacted': statusColor = Colors.orange; break;
+      default: statusColor = Colors.blue;
+    }
+
+    return GestureDetector(
+      onTap: productId.isNotEmpty 
+          ? () => Navigator.push(
+              context, 
+              MaterialPageRoute(builder: (_) => ProductDetails(productId: productId))
+            )
+          : null,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        decoration: BoxDecoration(
+          // ✅ FIX 3: Use Card Color (Dark/Light aware)
+          color: theme.cardColor, 
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            )
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: CachedNetworkImage(
+                      imageUrl: data['productImage'] ?? '',
+                      width: 80, height: 80, fit: BoxFit.cover,
+                      placeholder: (context, url) => Container(color: theme.colorScheme.surfaceContainer),
+                      errorWidget: (_, __, ___) => Icon(Icons.broken_image, color: Colors.grey[400]),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          data['productName'] ?? 'Unknown Item',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '₹${data['productPrice'] ?? '--'}',
+                          style: TextStyle(
+                            color: theme.colorScheme.primary, 
+                            fontWeight: FontWeight.w900
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: statusColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            status,
+                            style: TextStyle(color: statusColor, fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  IconButton(
+                    icon: const Icon(Icons.favorite, color: Colors.red),
+                    onPressed: () => _showRemoveDialog(docId),
+                  ),
+                ],
+              ),
+              
+              if (isWon) ...[
+                const SizedBox(height: 12),
+                const Divider(height: 1),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => AddReviewPage(
+                            productData: {
+                              'id': productId,
+                              'Name': data['productName'],
+                              'Image': data['productImage'],
+                            },
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.star_rate_rounded, size: 18),
+                    label: const Text("Write a Review"),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: theme.colorScheme.primary,
+                      side: BorderSide(color: theme.colorScheme.primary.withOpacity(0.5)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showRemoveDialog(String docId) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Remove Item?"),
+        content: const Text("Remove this from your interests list?"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _removeInterest(docId);
+            },
+            child: const Text("Remove", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildShimmerList(bool isDark) {
+    // ✅ FIX 4: Dark Mode Friendly Shimmer Colors
+    final baseColor = isDark ? Colors.grey[800]! : Colors.grey[300]!;
+    final highlightColor = isDark ? Colors.grey[700]! : Colors.grey[100]!;
+    final containerColor = isDark ? Colors.grey[900] : Colors.white;
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: 5,
+      itemBuilder: (_, __) => Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Shimmer.fromColors(
+          baseColor: baseColor,
+          highlightColor: highlightColor,
+          child: Container(
+            height: 100,
+            decoration: BoxDecoration(color: containerColor, borderRadius: BorderRadius.circular(16)),
+          ),
+        ),
+      ),
+    );
+  }
+}

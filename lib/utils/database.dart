@@ -4,6 +4,40 @@ import 'package:ecommerce_shop/services/cart_provider.dart';
 class DatabaseMethods {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+
+  // ===========================================================================
+  // 🤝 LEAD GENERATION (User -> Seller Interest)
+  // ===========================================================================
+
+  /// Adds a lead to the specific Admin's sub-collection
+  Future<void> addLeadToSeller({
+    required String adminId,
+    required Map<String, dynamic> leadData,
+  }) async {
+    try {
+      // Reference to the specific Admin's leads collection
+      final leadDocRef = _firestore
+          .collection('Admin')
+          .doc(adminId)
+          .collection('leads')
+          .doc(); // Generate ID automatically
+
+      // Add the ID to the data payload
+      final completeData = {
+        ...leadData,
+        'leadId': leadDocRef.id,
+        'adminId': adminId,
+        'timestamp': FieldValue.serverTimestamp(),
+        'status': 'New', // Default status
+      };
+
+      await leadDocRef.set(completeData);
+    } catch (e) {
+      print("Error adding lead: $e");
+      rethrow;
+    }
+  }
+
   // --- CONSUMER: GET DATA ---
   
   /// Fetches product listings filtered by category
@@ -48,84 +82,102 @@ class DatabaseMethods {
   }
   ///TODO : add logic for address parameter
   /// Handles the complex transaction of placing an order
+  // ===========================================================================
+  // 🛒 MARKETPLACE ORDER PLACEMENT (The "Fan-Out" Logic)
+  // ===========================================================================
+
   Future<String> placeOrder({
     required String userId,
     required List<Map<String, dynamic>> cartItems,
-    required CartProvider cartProvider,
     required String address,
+    required var cartProvider, // Pass provider to clear it later
   }) async {
-    if (cartItems.isEmpty) return "Cannot place an order with an empty cart.";
-
-    final batch = _firestore.batch();
-    final timestamp = FieldValue.serverTimestamp();
-
     try {
-      // 1. Generate a Single Order ID
-      final orderDoc = _firestore.collection('orders').doc(); 
-      final orderId = orderDoc.id;
+      final WriteBatch batch = FirebaseFirestore.instance.batch();
+      final String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
 
-      final double totalPrice = cartItems.fold(0.0, (sum, item) => sum + ((item['Price'] ?? 0) * (item['quantity'] ?? 0)));
+      // 1. GROUP ITEMS BY SELLER (AdminID)
+      // This ensures Seller A doesn't see Seller B's items.
+      Map<String, List<Map<String, dynamic>>> orderGroups = {};
 
-      final orderData = {
-        'orderId': orderId,
-        'userId': userId,
-        'items': cartItems,
-        'totalPrice': totalPrice,
-        'status': 'Pending',
-        'timestamp': timestamp,
-        'address': address, 
-      };
-
-      // 2. WRITE: User's History
-      final userOrderRef = _firestore.collection('users').doc(userId).collection('orders').doc(orderId);
-      batch.set(userOrderRef, orderData);
-
-      // 3. WRITE: Global Orderbook
-      batch.set(orderDoc, orderData);
-
-      // 4. UPDATE: Inventory (Global + Admin Side)
-      for (final item in cartItems) {
-        final productId = item['id'];
-        final quantity = item['quantity'];
-        final adminId = item['adminId']; // <--- CRITICAL: Get Seller ID from item
-
-        // A. Global Product Registry Reference
-        final globalProductRef = _firestore.collection('products').doc(productId);
+      for (var item in cartItems) {
+        String sellerId = item['adminId'] ?? 'super_admin'; // Fallback for safety
         
-        // B. Admin/Seller Local Listing Reference
-        final adminListingRef = _firestore
+        if (!orderGroups.containsKey(sellerId)) {
+          orderGroups[sellerId] = [];
+        }
+        orderGroups[sellerId]!.add(item);
+      }
+
+      // 2. CREATE SEPARATE ORDERS FOR EACH SELLER
+      for (var sellerId in orderGroups.keys) {
+        List<Map<String, dynamic>> sellerItems = orderGroups[sellerId]!;
+        
+        // Calculate total for this specific seller's part of the order
+        double sellerTotal = sellerItems.fold(0, (sum, item) {
+          return sum + ((item['Price'] ?? 0) * (item['quantity'] ?? 1));
+        });
+
+        String orderId = "${timestamp}_$sellerId"; // Unique ID per seller-order
+
+        // Data Payload
+        Map<String, dynamic> orderData = {
+          'orderId': orderId,
+          'buyerId': userId,
+          'sellerId': sellerId,
+          'items': sellerItems,
+          'address': address,
+          'totalPrice': sellerTotal,
+          'orderStatus': 'Pending', // Default status
+          'timestamp': FieldValue.serverTimestamp(),
+          'type': 'product', // To distinguish from services/leads if needed
+        };
+
+        // --- WRITE 1: To the USER'S history ---
+        DocumentReference userOrderRef = FirebaseFirestore.instance
+            .collection('users')
+            .doc(userId)
+            .collection('orders')
+            .doc(orderId);
+        
+        batch.set(userOrderRef, orderData);
+
+        // --- WRITE 2: To the SELLER'S Dashboard ---
+        // We flatten the items for the seller dashboard list if needed, 
+        // or just send the full object. 
+        // NOTE: Your AdminHome expects a list of documents. 
+        // Ideally, we create ONE document per order on the admin side too.
+        
+        DocumentReference sellerOrderRef = FirebaseFirestore.instance
             .collection('Admin')
-            .doc(adminId)
-            .collection('listings')
-            .doc(productId);
+            .doc(sellerId)
+            .collection('orders')
+            .doc(orderId);
 
-        // Queue Global Decrement
-        batch.update(globalProductRef, {
-          'inventory': FieldValue.increment(-quantity)
-        });
+        // Add a field so the Seller knows which User doc to update later
+        Map<String, dynamic> sellerViewData = {
+          ...orderData,
+          'consolidatedOrderId': orderId, // Link back to User's order ID
+          // Add simplified fields for the Admin List View if necessary
+          'productName': sellerItems.length == 1 
+              ? sellerItems[0]['Name'] 
+              : "${sellerItems[0]['Name']} + ${sellerItems.length - 1} more",
+          'productImage': sellerItems[0]['Image'],
+          'quantity': sellerItems.length == 1 
+              ? sellerItems[0]['quantity'] 
+              : sellerItems.length, // Simplified count
+        };
 
-        // Queue Seller Side Decrement (This was missing)
-        batch.update(adminListingRef, {
-          'inventory': FieldValue.increment(-quantity)
-        });
+        batch.set(sellerOrderRef, sellerViewData);
       }
 
-      // 5. DELETE: Clear User's Cart
-      final cartQuerySnapshot = await _firestore.collection('users').doc(userId).collection('cart').get();
-      for (final doc in cartQuerySnapshot.docs) {
-        batch.delete(doc.reference);
-      }
-      
-      // 6. COMMIT ATOMICALLY
-      // If any part of this fails (e.g., admin doc doesn't exist), the whole order is cancelled.
+      // 3. COMMIT & CLEAR CART
       await batch.commit();
-      
-      cartProvider.clearCart();
-      return "Order placed successfully!";
+      cartProvider.clearCart(); // Clear local cart
 
+      return "Order placed successfully!";
     } catch (e) {
-      print("⛔ Error placing order: $e");
-      return "Failed to place order. Please try again later.";
+      return "Failed to place order: $e";
     }
   }
 
