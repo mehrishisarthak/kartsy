@@ -16,29 +16,64 @@ class InterestListPage extends StatefulWidget {
 
 class _InterestListPageState extends State<InterestListPage> {
   
-  // ✅ Function to remove interest directly from Firestore (User's Copy)
-  Future<void> _removeInterest(String docId) async {
-    try {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(widget.userId)
-          .collection('leads')
-          .doc(docId)
-          .delete();
-          
-      if (mounted) {
+
+Future<void> _removeInterest(String docId) async {
+  try {
+    final leadRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(widget.userId)
+        .collection('leads')
+        .doc(docId);
+    
+    // 1. Fetch the document to get the adminId
+    final leadSnap = await leadRef.get();
+    final leadData = leadSnap.data();
+    
+    if (!leadSnap.exists || leadData == null) {
+        // If the user's copy is already gone, just show success
+        return; 
+    }
+    
+    final String adminId = leadData['adminId'] ?? 'super_admin'; // Fallback
+    
+    final WriteBatch batch = FirebaseFirestore.instance.batch();
+
+    // 2. Delete User's Copy (The original functionality)
+    batch.delete(leadRef);
+
+    // 3. ✅ FIX: Delete Seller's Copy
+    final sellerRef = FirebaseFirestore.instance
+        .collection('Admin')
+        .doc(adminId)
+        .collection('leads')
+        .doc(docId); // Uses the same docId/leadId
+    
+    batch.delete(sellerRef);
+    
+    // 4. Commit the Atomic Deletion
+    await batch.commit();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Removed from interests"),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 1),
+        ),
+      );
+    }
+  } catch (e) {
+    debugPrint("Error removing interest: $e");
+    if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Removed from interests"),
+          SnackBar(
+            content: Text("Failed to remove: $e"),
             behavior: SnackBarBehavior.floating,
-            duration: Duration(seconds: 1),
           ),
         );
-      }
-    } catch (e) {
-      debugPrint("Error removing interest: $e");
     }
   }
+}
 
   @override
   Widget build(BuildContext context) {
@@ -61,10 +96,7 @@ class _InterestListPageState extends State<InterestListPage> {
         centerTitle: true,
         elevation: 0,
         backgroundColor: theme.scaffoldBackgroundColor, // ✅ Match Scaffold
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: colorScheme.primary),
-          onPressed: () => Navigator.pop(context),
-        ),
+        automaticallyImplyLeading: false, // ✅ Removed Back Button
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
@@ -220,11 +252,19 @@ class _InterestListPageState extends State<InterestListPage> {
                       ],
                     ),
                   ),
-
-                  IconButton(
-                    icon: const Icon(Icons.favorite, color: Colors.red),
-                    onPressed: () => _showRemoveDialog(docId),
-                  ),
+                  
+                  // ✅ FIX 4: Conditional Delete Button
+                  if (!isWon)
+                    IconButton(
+                      icon: const Icon(Icons.favorite, color: Colors.red),
+                      onPressed: () => _showRemoveDialog(docId),
+                    )
+                  else
+                    // Show a static checkmark or success indicator
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Icon(Icons.verified, color: Colors.green.shade600),
+                    ),
                 ],
               ),
               
@@ -232,31 +272,12 @@ class _InterestListPageState extends State<InterestListPage> {
                 const SizedBox(height: 12),
                 const Divider(height: 1),
                 const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => AddReviewPage(
-                            productData: {
-                              'id': productId,
-                              'Name': data['productName'],
-                              'Image': data['productImage'],
-                            },
-                          ),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.star_rate_rounded, size: 18),
-                    label: const Text("Write a Review"),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: theme.colorScheme.primary,
-                      side: BorderSide(color: theme.colorScheme.primary.withOpacity(0.5)),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
+                // ✅ FIX 3: Use the smart button to prevent duplicate reviews
+                _ReviewStatusButton(
+                  productId: productId,
+                  userId: widget.userId,
+                  data: data,
+                  theme: theme,
                 ),
               ],
             ],
@@ -306,6 +327,79 @@ class _InterestListPageState extends State<InterestListPage> {
           ),
         ),
       ),
+    );
+  }
+}
+
+// --- Helper Widget to check review status (Issue #3) ---
+class _ReviewStatusButton extends StatelessWidget {
+  final String productId;
+  final String userId;
+  final Map<String, dynamic> data;
+  final ThemeData theme;
+
+  const _ReviewStatusButton({
+    required this.productId,
+    required this.userId,
+    required this.data,
+    required this.theme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // We check for the review document named by the USER ID (as per fix for Issue #3 in database.dart)
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('products')
+          .doc(productId)
+          .collection('reviews')
+          .doc(userId) 
+          .snapshots(),
+      builder: (context, snapshot) {
+        // If snapshot has data and the document exists, the user has already reviewed it
+        if (snapshot.hasData && snapshot.data!.exists) {
+          return SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: null, // Button disabled
+              icon: const Icon(Icons.check, color: Colors.green),
+              label: const Text("Reviewed", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Colors.green),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+          );
+        }
+
+        // Otherwise, show the normal 'Write a Review' button
+        return SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => AddReviewPage(
+                    productData: {
+                      'id': productId,
+                      'Name': data['productName'],
+                      'Image': data['productImage'],
+                    },
+                  ),
+                ),
+              );
+            },
+            icon: const Icon(Icons.star_rate_rounded, size: 18),
+            label: const Text("Write a Review"),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: theme.colorScheme.primary,
+              side: BorderSide(color: theme.colorScheme.primary.withOpacity(0.5)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+        );
+      },
     );
   }
 }

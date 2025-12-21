@@ -1,18 +1,23 @@
+import 'dart:io';
+
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:carousel_slider/carousel_slider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:dio/dio.dart'; // Import Dio
 import 'package:ecommerce_shop/pages/profile.dart';
 import 'package:ecommerce_shop/services/cart_provider.dart';
 import 'package:ecommerce_shop/services/lead_provider.dart';
+import 'package:ecommerce_shop/services/model_viewer.dart';
+import 'package:ecommerce_shop/services/product_image_carousel.dart';
+import 'package:ecommerce_shop/services/shimmer/button_shimmer.dart';
 import 'package:ecommerce_shop/services/shimmer/product_details_shimmer.dart';
+import 'package:ecommerce_shop/services/video_player.dart';
 import 'package:ecommerce_shop/utils/constants.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
-import 'package:model_viewer_plus/model_viewer_plus.dart';
+import 'package:path_provider/path_provider.dart'; // Import Path Provider
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
 class ProductDetails extends StatefulWidget {
   final String productId;
@@ -23,9 +28,8 @@ class ProductDetails extends StatefulWidget {
 }
 
 class _ProductDetailsState extends State<ProductDetails> {
+  late Stream<DocumentSnapshot> _productStream;
   bool _isLoading = false;
-  bool _show3D = false;
-  int _currentImageIndex = 0;
 
   // Review Pagination
   final List<DocumentSnapshot> _reviews = [];
@@ -37,10 +41,84 @@ class _ProductDetailsState extends State<ProductDetails> {
   // Lead Interest State
   bool _isAddingToInterests = false;
 
+  // --- 3D MODEL DOWNLOAD STATE ---
+  bool _isDownloadingModel = false;
+  double _downloadProgress = 0.0;
+
   @override
   void initState() {
     super.initState();
+    _productStream = FirebaseFirestore.instance
+        .collection('products')
+        .doc(widget.productId)
+        .snapshots();
+
     _fetchReviews();
+  }
+
+  Future<void> _handleDownloadAndOpenModel(String modelUrl, String productName) async {
+    // 1. Get the directory
+    final dir = await getApplicationDocumentsDirectory();
+    final fileName = "${widget.productId}_model.glb";
+    final savePath = "${dir.path}/$fileName";
+    final file = File(savePath);
+
+    // 2. CHECK: Does the file already exist?
+    if (await file.exists()) {
+      // PROD OPTIMIZATION: Skip download, open immediately
+      if (mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ModelViewerScreen(localFilePath: savePath),
+          ),
+        );
+      }
+      return;
+    }
+
+    // 3. If not found, start download
+    setState(() {
+      _isDownloadingModel = true;
+      _downloadProgress = 0.0;
+    });
+
+    try {
+      await Dio().download(
+        modelUrl,
+        savePath,
+        onReceiveProgress: (count, total) {
+          if (total != -1) {
+            setState(() {
+              _downloadProgress = count / total;
+            });
+          }
+        },
+      );
+
+      if (mounted) {
+        setState(() => _isDownloadingModel = false);
+
+        // Open Viewer
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ModelViewerScreen(localFilePath: savePath),
+          ),
+        );
+      }
+    } catch (e) {
+      // PROD OPTIMIZATION: Delete corrupt/partial file on error
+      if (await file.exists()) {
+        await file.delete();
+      }
+      
+      if (mounted) {
+        setState(() => _isDownloadingModel = false);
+        _showSnackBar("Failed to download 3D model. Check connection.", isError: true);
+        debugPrint("Download Error: $e");
+      }
+    }
   }
 
   // --- 1. FETCH REVIEWS ---
@@ -139,7 +217,6 @@ class _ProductDetailsState extends State<ProductDetails> {
           (address['state'] as String?)?.isEmpty == true ||
           (address['city'] as String?)?.isEmpty == true ||
           (address['mobile'] as String?)?.isEmpty == true) {
-        
         _showSnackBar("Please complete your profile to contact sellers.", isError: true);
 
         if (mounted) {
@@ -153,7 +230,6 @@ class _ProductDetailsState extends State<ProductDetails> {
       if (mounted) {
         _showInterestDialog(context, userId, productData, userData, address);
       }
-
     } catch (e) {
       _showSnackBar("Error verifying profile: $e", isError: true);
     } finally {
@@ -169,7 +245,6 @@ class _ProductDetailsState extends State<ProductDetails> {
     Map<String, dynamic> address,
   ) {
     final emailController = TextEditingController(text: userData?['Email'] ?? '');
-    
     String rawPhone = address['mobile'] ?? '';
     if (rawPhone.startsWith('+91')) rawPhone = rawPhone.substring(3);
     final phoneController = TextEditingController(text: rawPhone);
@@ -217,37 +292,37 @@ class _ProductDetailsState extends State<ProductDetails> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
           ElevatedButton(
-            onPressed: _isAddingToInterests ? null : () async {
-              if (emailController.text.isEmpty || phoneController.text.length != 10) {
-                _showSnackBar("Please check email and phone.", isError: true);
-                return;
-              }
-              setState(() => _isAddingToInterests = true);
-              try {
-                final result = await Provider.of<LeadsProvider>(context, listen: false).addLead(
-                  userId: userId,
-                  productId: widget.productId,
-                  productData: productData,
-                  userEmail: emailController.text.trim(),
-                  userPhone: phoneController.text.trim(),
-                  userName: userData?['Name'] ?? 'Customer',
-                  userCity: selectedCity!,
-                  userState: selectedState!,
-                );
-                if (mounted) {
-                  Navigator.pop(context);
-                  _showSnackBar(result, isError: false);
-                }
-              } catch (e) {
-                if (mounted) _showSnackBar("Error: $e", isError: true);
-              } finally {
-                if (mounted) setState(() => _isAddingToInterests = false);
-              }
-            },
+            onPressed: _isAddingToInterests
+                ? null
+                : () async {
+                    if (emailController.text.isEmpty || phoneController.text.length != 10) {
+                      _showSnackBar("Please check email and phone.", isError: true);
+                      return;
+                    }
+                    setState(() => _isAddingToInterests = true);
+                    try {
+                      final result = await Provider.of<LeadsProvider>(context, listen: false).addLead(
+                        userId: userId,
+                        productId: widget.productId,
+                        productData: productData,
+                        userEmail: emailController.text.trim(),
+                        userPhone: phoneController.text.trim(),
+                        userName: userData?['Name'] ?? 'Customer',
+                        userCity: selectedCity!,
+                        userState: selectedState!,
+                      );
+                      if (mounted) {
+                        Navigator.pop(context);
+                        _showSnackBar(result, isError: false);
+                      }
+                    } catch (e) {
+                      if (mounted) _showSnackBar("Error: $e", isError: true);
+                    } finally {
+                      if (mounted) setState(() => _isAddingToInterests = false);
+                    }
+                  },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[600], foregroundColor: Colors.white),
-            child: _isAddingToInterests 
-              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-              : const Text("Send to Seller"),
+            child: _isAddingToInterests ? const ButtonShimmer() : const Text("Send to Seller"),
           ),
         ],
       ),
@@ -268,20 +343,18 @@ class _ProductDetailsState extends State<ProductDetails> {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('products').doc(widget.productId).snapshots(),
+      stream: _productStream,
       builder: (context, snapshot) {
-        // Use Shimmer when waiting for initial data
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const ProductDetailsShimmer();
         }
-        
+
         if (!snapshot.hasData || !snapshot.data!.exists) {
           return const Scaffold(body: Center(child: Text("Product not found.")));
         }
 
         final product = snapshot.data!.data() as Map<String, dynamic>;
 
-        // Data Extraction
         final int inventory = int.tryParse(product['inventory']?.toString() ?? '0') ?? 0;
         List<dynamic> rawImages = product['images'] ?? [];
         if (rawImages.isEmpty && product['Image'] != null) {
@@ -289,18 +362,20 @@ class _ProductDetailsState extends State<ProductDetails> {
         }
         final List<String> imageUrls = rawImages.map((e) => e.toString()).toList();
 
-        final String? modelUrl = product['modelUrl'] ?? product['sketchfabUrl'];
-        final bool has3DModel = modelUrl != null && modelUrl.isNotEmpty;
         final String? videoUrl = product['videoUrl'];
         final bool hasVideo = videoUrl != null && videoUrl.isNotEmpty;
         final String category = product['category'] ?? '';
         final bool isFurniture = category.toLowerCase() == 'furniture';
 
-        // Overall Ratings Data
+        // --- NEW: Check for Model URL ---
+        final String? modelUrl = product['modelUrl'];
+        final bool hasModel = modelUrl != null && modelUrl.isNotEmpty;
+
         final double averageRating = (product['averageRating'] as num?)?.toDouble() ?? 0.0;
         final int reviewCount = (product['reviewCount'] as num?)?.toInt() ?? 0;
 
         return Scaffold(
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
           body: CustomScrollView(
             physics: const BouncingScrollPhysics(),
             slivers: [
@@ -308,60 +383,13 @@ class _ProductDetailsState extends State<ProductDetails> {
                 title: const Text("Product Details"),
                 centerTitle: true,
                 floating: true,
-                pinned: true, // Keep app bar visible
-                actions: [
-                  // 3D Toggle Button - Removed if no model
-                  if (has3DModel)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8.0),
-                      child: IconButton(
-                        icon: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.primaryContainer,
-                            shape: BoxShape.circle
-                          ),
-                          child: Icon(
-                            _show3D ? Icons.image : Icons.view_in_ar, 
-                            color: Theme.of(context).colorScheme.primary,
-                            size: 20,
-                          ),
-                        ),
-                        tooltip: _show3D ? "Show Images" : "View in 3D",
-                        onPressed: () => setState(() => _show3D = !_show3D),
-                      ),
-                    ),
-                ],
+                pinned: true,
               ),
               SliverToBoxAdapter(
                 child: SizedBox(
                   height: 350,
                   width: double.infinity,
-                  child: Stack(
-                    children: [
-                      // ✅ 3D MODEL VIEWER (Direct URL - No Local Caching)
-                      if (_show3D && has3DModel)
-                        ModelViewer(
-                          src: modelUrl!, // Pass remote URL directly
-                          alt: "A 3D model of ${product['Name']}",
-                          ar: true,
-                          autoRotate: true,
-                          cameraControls: true,
-                          backgroundColor: Colors.white,
-                          arModes: const ['scene-viewer', 'webxr', 'quick-look'], // Standard AR modes
-                        )
-                      else
-                        _buildImageCarousel(imageUrls),
-
-                      if (_show3D && has3DModel)
-                        Positioned(
-                          bottom: 20, 
-                          left: 0, 
-                          right: 0, 
-                          child: Center(child: _buildARBadge())
-                        ),
-                    ],
-                  ),
+                  child: ProductImagesCarousel(imageUrls: imageUrls),
                 ),
               ),
               SliverToBoxAdapter(
@@ -384,6 +412,70 @@ class _ProductDetailsState extends State<ProductDetails> {
                       ),
                       const SizedBox(height: 10),
                       _buildSummaryRating(averageRating, reviewCount),
+
+                      // --- NEW: 3D Model Download Button ---
+                      if (hasModel) ...[
+                        const SizedBox(height: 20),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                          ),
+                          child: Column(
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.view_in_ar, color: Colors.blue, size: 30),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          "View in 3D & AR",
+                                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                        ),
+                                        Text(
+                                          _isDownloadingModel 
+                                            ? "Downloading model..." 
+                                            : "Visualize this product in your space",
+                                          style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  ElevatedButton(
+                                    onPressed: _isDownloadingModel
+                                        ? null
+                                        : () => _handleDownloadAndOpenModel(modelUrl!, product['Name'] ?? 'Product'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.blue,
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
+                                    child: _isDownloadingModel
+                                        ? const SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                          )
+                                        : const Text("View"),
+                                  ),
+                                ],
+                              ),
+                              if (_isDownloadingModel) ...[
+                                const SizedBox(height: 10),
+                                LinearProgressIndicator(value: _downloadProgress, borderRadius: BorderRadius.circular(4)),
+                              ]
+                            ],
+                          ),
+                        ),
+                      ],
+                      // -------------------------------------
+
                       const SizedBox(height: 20),
                       Text('Details', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
                       const SizedBox(height: 10),
@@ -400,45 +492,8 @@ class _ProductDetailsState extends State<ProductDetails> {
                       const SizedBox(height: 30),
                       Text('Customer Reviews', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
                       const SizedBox(height: 15),
-
-                      // Overall Rating Summary Card
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primary.withOpacity(0.05),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Theme.of(context).colorScheme.primary.withOpacity(0.1)),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Column(
-                              children: [
-                                Text(
-                                  averageRating.toStringAsFixed(1),
-                                  style: TextStyle(
-                                    fontSize: 36,
-                                    fontWeight: FontWeight.bold,
-                                    color: Theme.of(context).colorScheme.primary,
-                                  ),
-                                ),
-                                RatingBarIndicator(
-                                  rating: averageRating,
-                                  itemBuilder: (context, index) => const Icon(Icons.star, color: Colors.amber),
-                                  itemCount: 5,
-                                  itemSize: 20.0,
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  "$reviewCount Ratings",
-                                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 20),
+                      // ... (Remaining Review Widgets stay exactly the same)
+                      _buildReviewSection(context, averageRating, reviewCount),
                     ],
                   ),
                 ),
@@ -499,22 +554,47 @@ class _ProductDetailsState extends State<ProductDetails> {
     );
   }
 
-  // --- Sub-Widgets ---
-
-  Widget _buildARBadge() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(20)),
-      child: const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.view_in_ar, color: Colors.white, size: 16),
-          SizedBox(width: 8),
-          Text("Tap the AR icon to view in your room", style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-        ],
-      ),
-    );
+  // Extracted Review Section to keep build method clean
+  Widget _buildReviewSection(BuildContext context, double averageRating, int reviewCount) {
+     return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.primary.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Theme.of(context).colorScheme.primary.withOpacity(0.1)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Column(
+              children: [
+                Text(
+                  averageRating.toStringAsFixed(1),
+                  style: TextStyle(
+                    fontSize: 36,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+                RatingBarIndicator(
+                  rating: averageRating,
+                  itemBuilder: (context, index) => const Icon(Icons.star, color: Colors.amber),
+                  itemCount: 5,
+                  itemSize: 20.0,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  "$reviewCount Ratings",
+                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
   }
+
+  // --- EXISTING SUB-WIDGETS (Unchanged logic, just keeping them here) ---
 
   Widget _buildAddToCartBottomBar(BuildContext context, int inventory, Map<String, dynamic> product) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -534,7 +614,7 @@ class _ProductDetailsState extends State<ProductDetails> {
               foregroundColor: inventory == 0 || inventory < 10 ? Colors.white : colorScheme.onPrimary,
             ),
             child: _isLoading
-                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                ? const ButtonShimmer()
                 : Text(
                     inventory == 0 ? "Out of Stock" : (inventory < 10 ? "Only $inventory left!" : "Add to Cart"),
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
@@ -560,7 +640,7 @@ class _ProductDetailsState extends State<ProductDetails> {
             onPressed: _isAddingToInterests ? null : () => _handleAddToInterests(context, product),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[600], foregroundColor: Colors.white),
             child: _isAddingToInterests
-                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                ? const ButtonShimmer()
                 : const Text("I'm Interested in This Product", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           ),
         ),
@@ -580,57 +660,6 @@ class _ProductDetailsState extends State<ProductDetails> {
         ),
         const SizedBox(width: 8),
         Text('$rating ($count reviews)', style: const TextStyle(color: Colors.grey)),
-      ],
-    );
-  }
-
-  Widget _buildImageCarousel(List<String> images) {
-    if (images.isEmpty) return const Center(child: Icon(Icons.broken_image, size: 80, color: Colors.grey));
-    return Column(
-      children: [
-        Expanded(
-          child: CarouselSlider(
-            options: CarouselOptions(
-              height: double.infinity,
-              viewportFraction: 1.0,
-              enableInfiniteScroll: images.length > 1,
-              onPageChanged: (index, reason) {
-                // Ensure state update doesn't crash if widget disposed
-                if (mounted) setState(() => _currentImageIndex = index);
-              },
-            ),
-            items: images.map((url) {
-              return CachedNetworkImage(
-                imageUrl: url,
-                fit: BoxFit.cover,
-                width: double.infinity,
-                placeholder: (context, url) => Shimmer.fromColors(
-                  baseColor: Colors.grey[300]!,
-                  highlightColor: Colors.grey[100]!,
-                  child: Container(color: Colors.white),
-                ),
-                errorWidget: (context, url, error) => Container(
-                    color: Colors.grey[200],
-                    child: const Icon(Icons.error, color: Colors.grey)),
-              );
-            }).toList(),
-          ),
-        ),
-        if (images.length > 1)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: images.asMap().entries.map((entry) {
-              return Container(
-                width: 8.0,
-                height: 8.0,
-                margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.black.withOpacity(_currentImageIndex == entry.key ? 0.9 : 0.4),
-                ),
-              );
-            }).toList(),
-          ),
       ],
     );
   }
@@ -716,88 +745,6 @@ class _ProductDetailsState extends State<ProductDetails> {
           ),
         );
       },
-    );
-  }
-}
-
-// --- 4. ISOLATED VIDEO PLAYER WIDGET ---
-class ProductVideoPlayer extends StatefulWidget {
-  final String videoUrl;
-  const ProductVideoPlayer({super.key, required this.videoUrl});
-
-  @override
-  State<ProductVideoPlayer> createState() => _ProductVideoPlayerState();
-}
-
-class _ProductVideoPlayerState extends State<ProductVideoPlayer> {
-  late YoutubePlayerController _controller;
-  bool _isPlayerReady = false;
-
-  @override
-  void initState() {
-    super.initState();
-    final videoId = YoutubePlayer.convertUrlToId(widget.videoUrl);
-
-    _controller = YoutubePlayerController(
-      initialVideoId: videoId ?? '',
-      flags: const YoutubePlayerFlags(
-        autoPlay: false,
-        mute: false,
-        disableDragSeek: false,
-        loop: false,
-        isLive: false,
-        forceHD: false,
-        enableCaption: true,
-      ),
-    )..addListener(_listener);
-  }
-
-  void _listener() {
-    if (_isPlayerReady && mounted && !_controller.value.isFullScreen) {
-      // Logic for non-fullscreen state updates if needed
-    }
-  }
-
-  @override
-  void deactivate() {
-    _controller.pause();
-    super.deactivate();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_controller.initialVideoId.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: YoutubePlayer(
-          controller: _controller,
-          showVideoProgressIndicator: true,
-          progressIndicatorColor: Theme.of(context).primaryColor,
-          onReady: () {
-            _isPlayerReady = true;
-          },
-        ),
-      ),
     );
   }
 }

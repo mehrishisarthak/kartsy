@@ -5,6 +5,7 @@ import 'package:ecommerce_shop/pages/order_screen.dart';
 import 'package:ecommerce_shop/pages/settings.dart';
 import 'package:ecommerce_shop/services/shared_preferences.dart';
 import 'package:ecommerce_shop/services/shimmer/profile_shimmer.dart';
+import 'package:ecommerce_shop/utils/constants.dart'; // Ensure this is imported
 import 'package:ecommerce_shop/utils/region_config.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -506,14 +507,17 @@ class _ProfilePageState extends State<ProfilePage> {
     final bool isButtonDisabled = _isLoading || !hasChanges;
     final Color buttonColor = isButtonDisabled ? Colors.grey : colorScheme.primary;
 
+    // --- UPDATED IMAGE LOGIC TO MATCH HOME SCREEN ---
     ImageProvider imageProvider;
     if (_imageFile != null) {
       imageProvider = FileImage(_imageFile!);
     } else if (personData?['Image'] != null && personData!['Image'].toString().isNotEmpty) {
       imageProvider = CachedNetworkImageProvider(personData!['Image']);
     } else {
-      imageProvider = const AssetImage('lib/assets/images/white.png');
+      // FIX: Use the constant URL used in Home Screen (no local asset path errors)
+      imageProvider = CachedNetworkImageProvider(AppConstants.defaultProfileImage);
     }
+    // ------------------------------------------------
 
     return Scaffold(
       resizeToAvoidBottomInset: true,

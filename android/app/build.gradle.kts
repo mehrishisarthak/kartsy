@@ -22,8 +22,8 @@ android {
 
     defaultConfig {
         applicationId = "com.classified.ecommerce_shop"
-        minSdk = flutter.minSdkVersion
-        targetSdk = 36
+        minSdkVersion(24)
+        targetSdkVersion(36)
         versionCode = 1
         versionName = "1.0.0"
     }

@@ -4,6 +4,7 @@ import 'package:ecommerce_shop/services/shimmer/signup_shimmer.dart';
 import 'package:ecommerce_shop/utils/authmethods.dart';
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // ✅ Added Import
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -45,7 +46,7 @@ class _LoginPageState extends State<LoginPage> {
       ));
   }
 
-  // 🔒 FORGOT PASSWORD DIALOG (NEW)
+  // 🔒 FORGOT PASSWORD DIALOG
   Future<void> _showForgotPasswordDialog() async {
     _forgotEmailController.text = _emailController.text; // Pre-fill email
     
@@ -117,6 +118,10 @@ class _LoginPageState extends State<LoginPage> {
       }
 
       if (res == "Login successful.") {
+        // ✅ FIX: Mark onboarding as seen
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('seenOnboarding', true);
+
         Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
       } else {
         setState(() => _isLoading = false);
@@ -139,6 +144,10 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) return;
 
       if (res == "Login successful.") {
+        // ✅ FIX: Mark onboarding as seen here too
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('seenOnboarding', true);
+
         Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
       } else {
         setState(() => _isLoading = false);

@@ -181,6 +181,8 @@ class DatabaseMethods {
     }
   }
 
+  // In database.dart
+
   Future<String> addReview({
     required String productId,
     required String userId,
@@ -203,8 +205,8 @@ class DatabaseMethods {
 
       WriteBatch batch = _firestore.batch();
 
-      // Add to Subcollection
-      DocumentReference reviewRef = productRef.collection('reviews').doc();
+      // 1. Add Review to Subcollection
+      DocumentReference reviewRef = productRef.collection('reviews').doc(userId); // Use userId as doc ID to prevent duplicates
       batch.set(reviewRef, {
         'userId': userId,
         'rating': rating,
@@ -212,11 +214,27 @@ class DatabaseMethods {
         'timestamp': FieldValue.serverTimestamp(),
       });
 
-      // Update Aggregates
+      // 2. Update GLOBAL Product Stats
       batch.update(productRef, {
         'averageRating': newAvg,
         'reviewCount': FieldValue.increment(1),
       });
+
+      // 3. ✅ FIX: Update CITY Product Stats (So it shows on Home Page)
+      // We try to find the city from the product data. Default to 'Jaipur' if missing.
+      String city = productData['city'] ?? 'Jaipur'; 
+      
+      DocumentReference cityProductRef = _firestore
+          .collection('cities')
+          .doc(city)
+          .collection('products')
+          .doc(productId);
+
+      // We use set with merge just in case the doc is missing in city (safety net)
+      batch.set(cityProductRef, {
+        'averageRating': newAvg,
+        'reviewCount': FieldValue.increment(1),
+      }, SetOptions(merge: true));
 
       await batch.commit();
       return "Review submitted successfully!";

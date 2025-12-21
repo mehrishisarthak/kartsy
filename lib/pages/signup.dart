@@ -3,6 +3,7 @@ import 'package:ecommerce_shop/services/shimmer/signup_shimmer.dart';
 import 'package:ecommerce_shop/utils/authmethods.dart';
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SignupPage extends StatefulWidget {
   const SignupPage({super.key});
@@ -51,28 +52,25 @@ class _SignupPageState extends State<SignupPage> {
 
   // --- ROBUST SIGNUP LOGIC ---
   Future<void> _handleSignup() async {
-    // 1. Validate inputs BEFORE hitting the server
     if (!_formKey.currentState!.validate()) return;
-
     setState(() => _isLoading = true);
 
-    // Note: We use an empty string or null for image. 
-    // The UI should handle displaying a default asset if this is empty.
     String res = await AuthMethods().signUpUser(
       email: _emailController.text.trim(),
       password: _passwordController.text.trim(),
       username: _nameController.text.trim(),
-      image: "", // Don't rely on hardcoded URLs
+      image: "",
     );
 
     if (!mounted) return;
     setState(() => _isLoading = false);
 
-    // 2. Check for the specific success message from your AuthMethods
     if (res.startsWith("Account created successfully")) {
-      // SUCCESS: Clear the stack so RootWrapper can show the Home Screen
-      Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+      // FIX: Mark onboarding as seen
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('seenOnboarding', true);
 
+      Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
     } else {
       _showSnackBar(res, isError: true);
     }
@@ -80,14 +78,15 @@ class _SignupPageState extends State<SignupPage> {
 
   Future<void> _handleGoogleSignup() async {
     setState(() => _isLoading = true);
-
     try {
       String res = await AuthMethods().signInWithGoogle();
-      
       if (!mounted) return;
 
       if (res == "Login successful.") {
-         // SUCCESS: Clear stack -> RootWrapper detects user -> Shows Home
+         // FIX: Mark onboarding as seen
+         final prefs = await SharedPreferences.getInstance();
+         await prefs.setBool('seenOnboarding', true);
+
          Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
       } else {
         _showSnackBar(res, isError: true);

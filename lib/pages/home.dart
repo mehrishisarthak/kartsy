@@ -1,5 +1,4 @@
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:carousel_slider/carousel_slider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ecommerce_shop/pages/category_products.dart';
 import 'package:ecommerce_shop/pages/discover_page.dart';
@@ -10,7 +9,7 @@ import 'package:ecommerce_shop/services/cart_provider.dart';
 import 'package:ecommerce_shop/services/shimmer/home_shimmer.dart';
 import 'package:ecommerce_shop/utils/constants.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_rating_bar/flutter_rating_bar.dart'; // ✅ Added for nicer stars
+import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:provider/provider.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -36,13 +35,6 @@ class _HomeScreenState extends State<HomeScreen> {
     {'name': 'All', 'icon': Icons.grid_view_rounded},
     {'name': 'Furniture', 'icon': Icons.chair_outlined},
     {'name': 'Home Decor', 'icon': Icons.local_florist_outlined},
-  ];
-
-  // Carousel Assets
-  final List<String> _carouselImages = [
-    "images/listings/headphone.png",
-    "images/products/laptop.png",
-    "images/products/watch.png",
   ];
 
   @override
@@ -182,7 +174,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         children: [
                           Text(_getGreeting(), style: textTheme.bodyMedium?.copyWith(color: Colors.grey[600], fontWeight: FontWeight.w500)),
                           const SizedBox(height: 4),
-                          Text('$userName 👋', style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                          // ✅ REMOVED EMOJI
+                          Text(userName, style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
                         ],
                       ),
                       GestureDetector(
@@ -196,10 +189,18 @@ class _HomeScreenState extends State<HomeScreen> {
                             }
                             if (liveImage.isEmpty) liveImage = AppConstants.defaultProfileImage;
 
-                            return CircleAvatar(
-                              radius: 24,
-                              backgroundColor: colorScheme.surfaceContainerHighest,
-                              backgroundImage: CachedNetworkImageProvider(liveImage),
+                            return Container(
+                              padding: const EdgeInsets.all(2), // Space for border
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                // ✅ ADDED BLUE BORDER TO PFP
+                                border: Border.all(color: colorScheme.primary, width: 2),
+                              ),
+                              child: CircleAvatar(
+                                radius: 24,
+                                backgroundColor: colorScheme.surfaceContainerHighest,
+                                backgroundImage: CachedNetworkImageProvider(liveImage),
+                              ),
                             );
                           }
                         ),
@@ -276,39 +277,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
 
-                const SizedBox(height: 24),
-
-                // 4. CAROUSEL
-                CarouselSlider(
-                  options: CarouselOptions(
-                    height: 160.0,
-                    autoPlay: true,
-                    enlargeCenterPage: true,
-                    aspectRatio: 16 / 9,
-                    viewportFraction: 0.85,
-                  ),
-                  items: _carouselImages.map((imagePath) {
-                    return Builder(
-                      builder: (BuildContext context) {
-                        return Container(
-                          width: MediaQuery.of(context).size.width,
-                          margin: const EdgeInsets.symmetric(horizontal: 5.0),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            image: DecorationImage(
-                              image: AssetImage(imagePath),
-                              fit: BoxFit.cover,
-                            ),
-                          ),
-                        );
-                      },
-                    );
-                  }).toList(),
-                ),
-
                 const SizedBox(height: 32),
 
-                // 5. CATEGORIES
+                // 4. CATEGORIES
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24.0),
                   child: Text(
@@ -375,7 +346,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 const SizedBox(height: 32),
 
-                // 6. HOME DECOR FEED
+                // 5. HOME DECOR FEED
                 _buildSectionHeader(
                   title: "Fresh Home Decor", 
                   onTapSeeAll: () => Navigator.push(context, MaterialPageRoute(
@@ -387,7 +358,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 const SizedBox(height: 32),
 
-                // 7. FURNITURE FEED
+                // 6. FURNITURE FEED
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24.0),
                   child: Row(
@@ -410,7 +381,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 const SizedBox(height: 40),
 
-                // 8. BROWSE ALL BUTTON
+                // 7. BROWSE ALL BUTTON
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24.0),
                   child: SizedBox(
@@ -472,7 +443,7 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
     return SizedBox(
-      height: 260, // Slightly increased for ratings
+      height: 260, 
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 24),
         scrollDirection: Axis.horizontal,
@@ -501,6 +472,8 @@ class _HomeScreenState extends State<HomeScreen> {
         decoration: BoxDecoration(
           color: isDark ? theme.colorScheme.surfaceContainerHighest : Colors.white, 
           borderRadius: BorderRadius.circular(16), 
+          // ✅ ADDED BLUE BORDER TO CARD
+          border: Border.all(color: theme.colorScheme.primary.withOpacity(0.3), width: 1),
           boxShadow: [
             if (!isDark) BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 15, offset: const Offset(0, 5))
           ]
@@ -513,7 +486,7 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Stack(
                 children: [
                   ClipRRect(
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(16)), 
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(15)), // -1px to fit border
                     child: CachedNetworkImage(
                       imageUrl: data['Image'] ?? '', 
                       width: double.infinity, 
@@ -537,7 +510,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     Text(data['Name'] ?? 'No Name', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                     const SizedBox(height: 4),
                     
-                    // ✅ RATING ROW
                     if (reviewCount > 0) 
                       Row(
                         children: [

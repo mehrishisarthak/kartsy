@@ -2,7 +2,7 @@
     package="com.classified.ecommerce_shop">
 
     <uses-permission android:name="android.permission.INTERNET"/>
-
+    
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
@@ -15,11 +15,12 @@
         android:label="virTwirl" 
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:enableOnBackInvokedCallback="true">
-        
-        <meta-data
+        android:enableOnBackInvokedCallback="true"
+        android:usesCleartextTraffic="true"> <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="AIzaSyDKt5NHM1GvxQUsdIrILd5SBg8FK_tAzjs"/>
+
+        <meta-data android:name="com.google.ar.core" android:value="optional" />
 
         <activity
             android:name=".MainActivity"
@@ -52,6 +53,11 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
         </intent>
     </queries>
 </manifest>

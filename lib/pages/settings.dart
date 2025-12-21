@@ -41,48 +41,49 @@ class SettingsPage extends StatelessWidget {
     }
   }
 
-  // --- NEW THEME SELECTOR WIDGET ---
   Widget _buildThemeSelector(BuildContext context, ThemeProvider themeProvider) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    
-    // Calculate button width dynamically to fit screen
-    // Screen Width - (Outer Padding * 2) - (Card Padding * 2) - (Border Widths)
-    final double buttonWidth = (MediaQuery.of(context).size.width - 32 - 32 - 6) / 3;
+  final theme = Theme.of(context);
+  final isDark = theme.brightness == Brightness.dark;
 
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "App Appearance",
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+  return Card(
+    elevation: 2,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(16),
+    ),
+    // REMOVED: Expanded widget
+    child: Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "App Appearance",
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.bold,
             ),
-            const SizedBox(height: 16),
-            Center(
-              child: ToggleButtons(
+          ),
+          const SizedBox(height: 16),
+          
+          // This LayoutBuilder is what actually prevents the overflow
+          LayoutBuilder(
+            builder: (context, constraints) {
+              // Calculate width dynamically based on parent width
+              final double buttonWidth = (constraints.maxWidth - 5) / 3;
+    
+              return ToggleButtons(
                 borderRadius: BorderRadius.circular(12.0),
                 borderWidth: 1.5,
                 borderColor: theme.colorScheme.outline.withOpacity(0.3),
                 selectedBorderColor: theme.colorScheme.primary,
                 
-                // Active State Colors
                 fillColor: theme.colorScheme.primary,
                 selectedColor: theme.colorScheme.onPrimary,
                 
-                // Inactive State Colors
                 color: isDark ? Colors.white70 : Colors.black54,
                 
                 constraints: BoxConstraints(
-                  minHeight: 50.0, // Taller buttons for better touch target
+                  minHeight: 50.0,
+                  // This forces the buttons to fit exactly within the card
                   minWidth: buttonWidth, 
                 ),
                 
@@ -93,7 +94,6 @@ class SettingsPage extends StatelessWidget {
                 ],
                 
                 onPressed: (index) {
-                  // Map index to ThemeMode
                   const List<ThemeMode> modes = [
                     ThemeMode.light,
                     ThemeMode.dark,
@@ -103,41 +103,39 @@ class SettingsPage extends StatelessWidget {
                 },
                 
                 children: const [
-                  // Light Option
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.light_mode_outlined, size: 20),
-                      SizedBox(width: 8),
-                      Text("Light", style: TextStyle(fontWeight: FontWeight.w600)),
+                      Icon(Icons.light_mode_outlined, size: 18),
+                      SizedBox(width: 6),
+                      Text("Light", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                     ],
                   ),
-                  // Dark Option
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.dark_mode_outlined, size: 20),
-                      SizedBox(width: 8),
-                      Text("Dark", style: TextStyle(fontWeight: FontWeight.w600)),
+                      Icon(Icons.dark_mode_outlined, size: 18),
+                      SizedBox(width: 6),
+                      Text("Dark", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                     ],
                   ),
-                  // System Option
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.brightness_auto_outlined, size: 20),
-                      SizedBox(width: 8),
-                      Text("Auto", style: TextStyle(fontWeight: FontWeight.w600)),
+                      Icon(Icons.brightness_auto_outlined, size: 18),
+                      SizedBox(width: 6),
+                      Text("Auto", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                     ],
                   ),
                 ],
-              ),
-            ),
-          ],
-        ),
+              );
+            },
+          ),
+        ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   @override
   Widget build(BuildContext context) {

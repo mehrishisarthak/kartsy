@@ -1,9 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ecommerce_shop/pages/bottomnav.dart';
 import 'package:ecommerce_shop/pages/login.dart';
+import 'package:ecommerce_shop/pages/login_after_signup.dart'; // ✅ Added Import
 import 'package:ecommerce_shop/pages/maintenance_screen.dart';
 import 'package:ecommerce_shop/pages/onboarding.dart';
-import 'package:ecommerce_shop/services/shimmer/root_wrapper_shimemr.dart'; // Ensure filename matches
+import 'package:ecommerce_shop/services/shimmer/root_wrapper_shimemr.dart'; 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -68,9 +69,12 @@ class _RootWrapperState extends State<RootWrapper> {
             final user = snapshot.data;
 
             if (user != null) {
-              // 3. Optional: Enforce Email Verification
+              // 3. Enforce Email Verification
+              // ✅ FIX: Redirect to Verification Page instead of Login Page
+              // This prevents the infinite loop where Login sends you here, 
+              // and here sends you back to Login.
               if (!user.emailVerified) {
-                return const LoginPage();
+                return const LoginPageAfterSignup();
               }
               // User valid -> Go to Home
               return BottomBar(userId: user.uid);
@@ -90,9 +94,9 @@ class _RootWrapperState extends State<RootWrapper> {
     try {
       final doc = await FirebaseFirestore.instance
           .collection('controls')
-          .doc('maintenance') // ✅ Standardized ID (create this in Firestore)
+          .doc('maintenance') 
           .get()
-          .timeout(const Duration(seconds: 3)); // ✅ 3s Timeout prevents hanging
+          .timeout(const Duration(seconds: 3)); 
 
       if (!doc.exists) return false;
 

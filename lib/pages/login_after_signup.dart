@@ -4,6 +4,7 @@ import 'package:ecommerce_shop/utils/authmethods.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // ✅ Added Import
 
 class LoginPageAfterSignup extends StatefulWidget {
   const LoginPageAfterSignup({super.key});
@@ -59,8 +60,11 @@ class _LoginPageAfterSignupState extends State<LoginPageAfterSignup> {
       } else {
         _showSnackBar("This email is already verified.");
       }
-      // Sign out so they have to log in again properly
-      await FirebaseAuth.instance.signOut();
+      
+      // ✅ FIX: Removed signOut() here.
+      // This keeps the user on the screen so they can see the Snackbar.
+      // The RootWrapper will naturally keep them here because emailVerified is still false.
+      
     } on FirebaseAuthException catch (e) {
       _showSnackBar("Error: ${e.message}", isError: true);
     } catch (e) {
@@ -88,6 +92,11 @@ class _LoginPageAfterSignupState extends State<LoginPageAfterSignup> {
       if (!mounted) return;
 
       if (res == "Login successful.") {
+        // ✅ FIX: Mark Onboarding as seen
+        // This ensures if they restart the app later, they go straight to Home
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('seenOnboarding', true);
+
         // 2. SUCCESS: Pop to root. RootWrapper takes over from here.
         Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
       } else {
