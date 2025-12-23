@@ -2,9 +2,10 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ecommerce_shop/pages/product_details.dart';
 import 'package:ecommerce_shop/pages/review_page.dart';
+import 'package:ecommerce_shop/utils/show_snackbar.dart';
+import 'package:ecommerce_shop/widget/generic_list_shimmer.dart';
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
-import 'package:shimmer/shimmer.dart';
 
 class InterestListPage extends StatefulWidget {
   final String userId;
@@ -15,65 +16,54 @@ class InterestListPage extends StatefulWidget {
 }
 
 class _InterestListPageState extends State<InterestListPage> {
-  
+  Future<void> _removeInterest(String docId) async {
+    try {
+      final leadRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.userId)
+          .collection('leads')
+          .doc(docId);
 
-Future<void> _removeInterest(String docId) async {
-  try {
-    final leadRef = FirebaseFirestore.instance
-        .collection('users')
-        .doc(widget.userId)
-        .collection('leads')
-        .doc(docId);
-    
-    // 1. Fetch the document to get the adminId
-    final leadSnap = await leadRef.get();
-    final leadData = leadSnap.data();
-    
-    if (!leadSnap.exists || leadData == null) {
+      // 1. Fetch the document to get the adminId
+      final leadSnap = await leadRef.get();
+      final leadData = leadSnap.data();
+
+      if (!leadSnap.exists || leadData == null) {
         // If the user's copy is already gone, just show success
-        return; 
-    }
-    
-    final String adminId = leadData['adminId'] ?? 'super_admin'; // Fallback
-    
-    final WriteBatch batch = FirebaseFirestore.instance.batch();
+        return;
+      }
 
-    // 2. Delete User's Copy (The original functionality)
-    batch.delete(leadRef);
+      final String adminId = leadData['adminId'] ?? 'super_admin'; // Fallback
 
-    // 3. ✅ FIX: Delete Seller's Copy
-    final sellerRef = FirebaseFirestore.instance
-        .collection('Admin')
-        .doc(adminId)
-        .collection('leads')
-        .doc(docId); // Uses the same docId/leadId
-    
-    batch.delete(sellerRef);
-    
-    // 4. Commit the Atomic Deletion
-    await batch.commit();
+      final WriteBatch batch = FirebaseFirestore.instance.batch();
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Removed from interests"),
-          behavior: SnackBarBehavior.floating,
-          duration: Duration(seconds: 1),
-        ),
-      );
-    }
-  } catch (e) {
-    debugPrint("Error removing interest: $e");
-    if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Failed to remove: $e"),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+      // 2. Delete User's Copy (The original functionality)
+      batch.delete(leadRef);
+
+      // 3. ✅ FIX: Delete Seller's Copy
+      final sellerRef = FirebaseFirestore.instance
+          .collection('Admin')
+          .doc(adminId)
+          .collection('leads')
+          .doc(docId); // Uses the same docId/leadId
+
+      batch.delete(sellerRef);
+
+      // 4. Commit the Atomic Deletion
+      await batch.commit();
+
+      if (mounted) {
+        showCustomSnackBar(context, "Removed from interests",
+            type: SnackBarType.success);
+      }
+    } catch (e) {
+      debugPrint("Error removing interest: $e");
+      if (mounted) {
+        showCustomSnackBar(context, "Failed to remove: $e",
+            type: SnackBarType.error);
+      }
     }
   }
-}
 
   @override
   Widget build(BuildContext context) {
@@ -84,7 +74,7 @@ Future<void> _removeInterest(String docId) async {
 
     return Scaffold(
       // ✅ FIX 1: Use Theme Background
-      backgroundColor: theme.scaffoldBackgroundColor, 
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(
           'My Interests',
@@ -107,7 +97,7 @@ Future<void> _removeInterest(String docId) async {
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return _buildShimmerList(isDark);
+            return const GenericListShimmer();
           }
 
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
@@ -133,7 +123,8 @@ Future<void> _removeInterest(String docId) async {
                   const SizedBox(height: 8),
                   Text(
                     'Items you inquire about will appear here.',
-                    style: TextStyle(color: isDark ? Colors.grey[600] : Colors.grey[500]),
+                    style: TextStyle(
+                        color: isDark ? Colors.grey[600] : Colors.grey[500]),
                   ),
                 ],
               ),
@@ -149,12 +140,12 @@ Future<void> _removeInterest(String docId) async {
             itemBuilder: (context, index) {
               final leadDoc = leads[index];
               final leadData = leadDoc.data() as Map<String, dynamic>;
-              final String productId = leadData['productId'] ?? ''; 
-              
+              final String productId = leadData['productId'] ?? '';
+
               return _buildInterestCard(
-                context, 
-                leadData, 
-                docId: leadDoc.id, 
+                context,
+                leadData,
+                docId: leadDoc.id,
                 productId: productId,
                 theme: theme, // Pass theme
               );
@@ -165,34 +156,40 @@ Future<void> _removeInterest(String docId) async {
     );
   }
 
-  Widget _buildInterestCard(
-    BuildContext context, 
-    Map<String, dynamic> data, 
-    {required String docId, required String productId, required ThemeData theme}
-  ) {
+  Widget _buildInterestCard(BuildContext context, Map<String, dynamic> data,
+      {required String docId,
+      required String productId,
+      required ThemeData theme}) {
     String status = data['status'] ?? 'New';
     bool isWon = status == 'Won';
-    
+
     Color statusColor;
     switch (status) {
-      case 'Won': statusColor = Colors.green; break;
-      case 'Lost': statusColor = Colors.red; break;
-      case 'Contacted': statusColor = Colors.orange; break;
-      default: statusColor = Colors.blue;
+      case 'Won':
+        statusColor = Colors.green;
+        break;
+      case 'Lost':
+        statusColor = Colors.red;
+        break;
+      case 'Contacted':
+        statusColor = Colors.orange;
+        break;
+      default:
+        statusColor = Colors.blue;
     }
 
     return GestureDetector(
-      onTap: productId.isNotEmpty 
+      onTap: productId.isNotEmpty
           ? () => Navigator.push(
-              context, 
-              MaterialPageRoute(builder: (_) => ProductDetails(productId: productId))
-            )
+              context,
+              MaterialPageRoute(
+                  builder: (_) => ProductDetails(productId: productId)))
           : null,
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
         decoration: BoxDecoration(
           // ✅ FIX 3: Use Card Color (Dark/Light aware)
-          color: theme.cardColor, 
+          color: theme.cardColor,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
@@ -212,20 +209,24 @@ Future<void> _removeInterest(String docId) async {
                     borderRadius: BorderRadius.circular(12),
                     child: CachedNetworkImage(
                       imageUrl: data['productImage'] ?? '',
-                      width: 80, height: 80, fit: BoxFit.cover,
-                      placeholder: (context, url) => Container(color: theme.colorScheme.surfaceContainer),
-                      errorWidget: (_, __, ___) => Icon(Icons.broken_image, color: Colors.grey[400]),
+                      width: 80,
+                      height: 80,
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) =>
+                          Container(color: theme.colorScheme.surfaceContainer),
+                      errorWidget: (_, __, ___) =>
+                          Icon(Icons.broken_image, color: Colors.grey[400]),
                     ),
                   ),
                   const SizedBox(width: 16),
-                  
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           data['productName'] ?? 'Unknown Item',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 16),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -233,29 +234,33 @@ Future<void> _removeInterest(String docId) async {
                         Text(
                           '₹${data['productPrice'] ?? '--'}',
                           style: TextStyle(
-                            color: theme.colorScheme.primary, 
-                            fontWeight: FontWeight.w900
-                          ),
+                              color: theme.colorScheme.primary,
+                              fontWeight: FontWeight.w900),
                         ),
                         const SizedBox(height: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
                             color: statusColor.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
                             status,
-                            style: TextStyle(color: statusColor, fontSize: 12, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                                color: statusColor,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  
+
                   // ✅ FIX 4: Conditional Delete Button
                   if (!isWon)
                     IconButton(
+                      tooltip: 'Remove from interests',
                       icon: const Icon(Icons.favorite, color: Colors.red),
                       onPressed: () => _showRemoveDialog(docId),
                     )
@@ -267,7 +272,6 @@ Future<void> _removeInterest(String docId) async {
                     ),
                 ],
               ),
-              
               if (isWon) ...[
                 const SizedBox(height: 12),
                 const Divider(height: 1),
@@ -294,7 +298,9 @@ Future<void> _removeInterest(String docId) async {
         title: const Text("Remove Item?"),
         content: const Text("Remove this from your interests list?"),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel")),
           TextButton(
             onPressed: () {
               Navigator.pop(context);
@@ -303,29 +309,6 @@ Future<void> _removeInterest(String docId) async {
             child: const Text("Remove", style: TextStyle(color: Colors.red)),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildShimmerList(bool isDark) {
-    // ✅ FIX 4: Dark Mode Friendly Shimmer Colors
-    final baseColor = isDark ? Colors.grey[800]! : Colors.grey[300]!;
-    final highlightColor = isDark ? Colors.grey[700]! : Colors.grey[100]!;
-    final containerColor = isDark ? Colors.grey[900] : Colors.white;
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: 5,
-      itemBuilder: (_, __) => Padding(
-        padding: const EdgeInsets.only(bottom: 16),
-        child: Shimmer.fromColors(
-          baseColor: baseColor,
-          highlightColor: highlightColor,
-          child: Container(
-            height: 100,
-            decoration: BoxDecoration(color: containerColor, borderRadius: BorderRadius.circular(16)),
-          ),
-        ),
       ),
     );
   }
@@ -353,7 +336,7 @@ class _ReviewStatusButton extends StatelessWidget {
           .collection('products')
           .doc(productId)
           .collection('reviews')
-          .doc(userId) 
+          .doc(userId)
           .snapshots(),
       builder: (context, snapshot) {
         // If snapshot has data and the document exists, the user has already reviewed it
@@ -363,10 +346,13 @@ class _ReviewStatusButton extends StatelessWidget {
             child: OutlinedButton.icon(
               onPressed: null, // Button disabled
               icon: const Icon(Icons.check, color: Colors.green),
-              label: const Text("Reviewed", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+              label: const Text("Reviewed",
+                  style: TextStyle(
+                      color: Colors.green, fontWeight: FontWeight.bold)),
               style: OutlinedButton.styleFrom(
                 side: const BorderSide(color: Colors.green),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
               ),
             ),
           );
@@ -394,8 +380,10 @@ class _ReviewStatusButton extends StatelessWidget {
             label: const Text("Write a Review"),
             style: OutlinedButton.styleFrom(
               foregroundColor: theme.colorScheme.primary,
-              side: BorderSide(color: theme.colorScheme.primary.withOpacity(0.5)),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              side:
+                  BorderSide(color: theme.colorScheme.primary.withOpacity(0.5)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
             ),
           ),
         );

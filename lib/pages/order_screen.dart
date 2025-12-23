@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ecommerce_shop/pages/review_page.dart';
 import 'package:ecommerce_shop/services/shimmer/order_shimmer.dart';
+import 'package:ecommerce_shop/utils/show_snackbar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -31,6 +32,7 @@ class UserOrdersPage extends StatelessWidget {
           elevation: 0,
           backgroundColor: colorScheme.surface,
           leading: IconButton(
+            tooltip: 'Back',
             icon: Icon(Icons.arrow_back, color: colorScheme.primary),
             onPressed: () => Navigator.pop(context),
           ),
@@ -56,22 +58,22 @@ class UserOrdersPage extends StatelessWidget {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: OrdersShimmer());
             }
-            
+
             // Global Empty State (User has NEVER ordered anything)
             if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
               return Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Lottie.asset('images/emptyOrders.json', height: 250, repeat: false),
+                    Lottie.asset('images/emptyOrders.json',
+                        height: 250, repeat: false),
                     const SizedBox(height: 20),
                     Text(
                       'No orders found yet!',
                       style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold
-                      ),
+                          color: Colors.grey[600],
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold),
                     ),
                   ],
                 ),
@@ -83,11 +85,15 @@ class UserOrdersPage extends StatelessWidget {
                 .toList();
 
             final activeOrders = allOrders
-                .where((order) => order['orderStatus'] != 'Delivered' && order['orderStatus'] != 'Cancelled')
+                .where((order) =>
+                    order['orderStatus'] != 'Delivered' &&
+                    order['orderStatus'] != 'Cancelled')
                 .toList();
-            
+
             final completedOrders = allOrders
-                .where((order) => order['orderStatus'] == 'Delivered' || order['orderStatus'] == 'Cancelled')
+                .where((order) =>
+                    order['orderStatus'] == 'Delivered' ||
+                    order['orderStatus'] == 'Cancelled')
                 .toList();
 
             return TabBarView(
@@ -103,21 +109,27 @@ class UserOrdersPage extends StatelessWidget {
   }
 
   // ✅ FIXED: Centered Lottie for Empty Tabs
-  Widget _buildOrderList(List<Map<String, dynamic>> orders, {required bool showReview}) {
+  Widget _buildOrderList(List<Map<String, dynamic>> orders,
+      {required bool showReview}) {
     if (orders.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center, // Vertically Center
-          crossAxisAlignment: CrossAxisAlignment.center, // Horizontally Center
+          crossAxisAlignment:
+              CrossAxisAlignment.center, // Horizontally Center
           children: [
             Opacity(
               opacity: 0.8,
-              child: Lottie.asset('images/emptyOrders.json', height: 200, repeat: false),
+              child: Lottie.asset('images/emptyOrders.json',
+                  height: 200, repeat: false),
             ),
             const SizedBox(height: 10),
             Text(
               "No orders in this category.",
-              style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.w500, fontSize: 16),
+              style: TextStyle(
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w500,
+                  fontSize: 16),
             ),
           ],
         ),
@@ -128,10 +140,7 @@ class UserOrdersPage extends StatelessWidget {
       itemCount: orders.length,
       itemBuilder: (context, index) {
         return OrderCard(
-          order: orders[index], 
-          userId: userId, 
-          showReview: showReview
-        );
+            order: orders[index], userId: userId, showReview: showReview);
       },
     );
   }
@@ -151,13 +160,8 @@ class OrderCard extends StatelessWidget {
 
   void _copyToClipboard(BuildContext context, String text) {
     Clipboard.setData(ClipboardData(text: text));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Order ID copied to clipboard!"), 
-        duration: Duration(seconds: 1),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    showCustomSnackBar(context, "Order ID copied to clipboard!",
+        type: SnackBarType.info);
   }
 
   @override
@@ -165,7 +169,7 @@ class OrderCard extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     final timestamp = (order['timestamp'] as Timestamp?)?.toDate();
     final items = (order['items'] as List).cast<Map<String, dynamic>>();
-    
+
     String status = order['orderStatus'] ?? 'Pending';
     Color statusColor;
     IconData statusIcon;
@@ -204,21 +208,22 @@ class OrderCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      timestamp != null 
-                          ? DateFormat('MMM dd, yyyy').format(timestamp) 
+                      timestamp != null
+                          ? DateFormat('MMM dd, yyyy').format(timestamp)
                           : 'Unknown Date',
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     Text(
-                      timestamp != null 
-                          ? DateFormat('hh:mm a').format(timestamp) 
+                      timestamp != null
+                          ? DateFormat('hh:mm a').format(timestamp)
                           : '',
                       style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                     ),
                   ],
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: statusColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(20),
@@ -228,21 +233,24 @@ class OrderCard extends StatelessWidget {
                     children: [
                       Icon(statusIcon, size: 14, color: statusColor),
                       const SizedBox(width: 4),
-                      Text(status, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12)),
+                      Text(status,
+                          style: TextStyle(
+                              color: statusColor,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12)),
                     ],
                   ),
                 ),
               ],
             ),
-            
+
             const Divider(height: 24),
 
             // --- ITEMS ---
             ...items.map((item) => OrderItemRow(
-              item: item, 
-              userId: userId, 
-              showReviewButton: showReview && status == 'Delivered'
-            )),
+                item: item,
+                userId: userId,
+                showReviewButton: showReview && status == 'Delivered')),
 
             const Divider(height: 24),
 
@@ -254,14 +262,18 @@ class OrderCard extends StatelessWidget {
                   onTap: () => _copyToClipboard(context, order['orderId']),
                   borderRadius: BorderRadius.circular(8),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 8.0, horizontal: 4.0),
                     child: Row(
                       children: [
                         const Icon(Icons.copy, size: 16, color: Colors.grey),
                         const SizedBox(width: 6),
                         Text(
                           "Copy Order ID",
-                          style: TextStyle(color: Colors.grey[700], fontSize: 12, decoration: TextDecoration.underline),
+                          style: TextStyle(
+                              color: Colors.grey[700],
+                              fontSize: 12,
+                              decoration: TextDecoration.underline),
                         ),
                       ],
                     ),
@@ -306,9 +318,13 @@ class OrderItemRow extends StatelessWidget {
             borderRadius: BorderRadius.circular(8),
             child: CachedNetworkImage(
               imageUrl: item['Image'] ?? '',
-              width: 60, height: 60, fit: BoxFit.cover,
+              width: 60,
+              height: 60,
+              fit: BoxFit.cover,
               placeholder: (context, url) => Container(color: Colors.grey[100]),
-              errorWidget: (_, __, ___) => Container(color: Colors.grey[100], child: const Icon(Icons.broken_image)),
+              errorWidget: (_, __, ___) => Container(
+                  color: Colors.grey[100],
+                  child: const Icon(Icons.broken_image)),
             ),
           ),
           const SizedBox(width: 12),
@@ -316,13 +332,17 @@ class OrderItemRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(item['Name'] ?? 'Product', style: const TextStyle(fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text(item['Name'] ?? 'Product',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 4),
-                Text('Qty: ${item['quantity'] ?? 1}  •  ₹${item['Price']}', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
-                
+                Text('Qty: ${item['quantity'] ?? 1}  •  ₹${item['Price']}',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 13)),
                 if (showReviewButton) ...[
                   const SizedBox(height: 8),
-                  _ReviewActionButton(productId: item['id'], userId: userId, itemData: item),
+                  _ReviewActionButton(
+                      productId: item['id'], userId: userId, itemData: item),
                 ]
               ],
             ),
@@ -338,22 +358,34 @@ class _ReviewActionButton extends StatelessWidget {
   final String userId;
   final Map<String, dynamic> itemData;
 
-  const _ReviewActionButton({required this.productId, required this.userId, required this.itemData});
+  const _ReviewActionButton(
+      {required this.productId, required this.userId, required this.itemData});
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
-          .collection('products').doc(productId).collection('reviews')
-          .where('userId', isEqualTo: userId).limit(1).snapshots(),
+          .collection('products')
+          .doc(productId)
+          .collection('reviews')
+          .where('userId', isEqualTo: userId)
+          .limit(1)
+          .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
-          return const Text('✨ Reviewed', style: TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.bold));
+          return const Text('✨ Reviewed',
+              style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.green,
+                  fontWeight: FontWeight.bold));
         }
         return SizedBox(
           height: 30,
           child: OutlinedButton(
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AddReviewPage(productData: itemData))),
+            onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => AddReviewPage(productData: itemData))),
             style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               side: BorderSide(color: Theme.of(context).colorScheme.primary),

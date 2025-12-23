@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:ecommerce_shop/services/firestore_service.dart';
 import 'package:flutter/foundation.dart';
 
 class CartProvider with ChangeNotifier {
+  final FirestoreService _firestoreService = FirestoreService();
+
   // Local cache of cart items
   List<Map<String, dynamic>> _cart = [];
   List<Map<String, dynamic>> get cart => _cart;
@@ -71,12 +74,7 @@ class CartProvider with ChangeNotifier {
 
       try {
         // E. THE ACTUAL WRITE (Happens only once per sequence)
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(userId)
-            .collection('cart')
-            .doc(productId)
-            .update({'quantity': newQuantity});
+        await _firestoreService.updateCartQuantity(userId, productId, newQuantity);
             
       } catch (e) {
         debugPrint("Cart Sync Error: $e");
@@ -115,12 +113,7 @@ class CartProvider with ChangeNotifier {
       notifyListeners();
 
       try {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(userId)
-            .collection('cart')
-            .doc(product['id'])
-            .set(newItem);
+        await _firestoreService.addProductToCart(userId, newItem);
       } catch (e) {
         debugPrint("Add to Cart Error: $e");
         _cart.removeWhere((item) => item['id'] == product['id']); // Revert on fail
@@ -139,12 +132,28 @@ class CartProvider with ChangeNotifier {
     notifyListeners();
 
     // Fire & Forget Delete
-    FirebaseFirestore.instance
-        .collection('users')
-        .doc(userId)
-        .collection('cart')
-        .doc(productId)
-        .delete();
+    _firestoreService.removeProductFromCart(userId, productId);
+  }
+
+  Future<String> placeOrder({
+    required String userId,
+    required String address,
+  }) async {
+    try {
+      final result = await _firestoreService.placeOrder(
+        userId: userId,
+        cartItems: List<Map<String, dynamic>>.from(cart),
+        address: address,
+      );
+      
+      if (result.contains("successfully")) {
+        clearCart();
+      }
+      
+      return result;
+    } catch (e) {
+      return "Failed to place order: $e";
+    }
   }
 
   double getTotalPrice() {

@@ -181,6 +181,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             ),
                           )
                         : IconButton(
+                            tooltip: 'Next',
                             icon: Icon(
                               Icons.arrow_forward_ios,
                               color: colorScheme.primary,

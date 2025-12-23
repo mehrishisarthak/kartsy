@@ -1,7 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:ecommerce_shop/services/cart_provider.dart';
-
-class DatabaseMethods {
+class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
 
@@ -61,25 +59,49 @@ class DatabaseMethods {
     return ordersSnapshot.docs.map((doc) => doc.data()).toList();
   }
 
-  // --- CONSUMER: ACTIONS ---
-
-  Future<void> addToCart(String userId, Map<String, dynamic> product) async {
-    final cartRef = _firestore.collection('users').doc(userId).collection('cart').doc(product['id']);
-    final doc = await cartRef.get();
-
-    if (doc.exists) {
-      await cartRef.update({'quantity': FieldValue.increment(1)});
-    } else {
-      await cartRef.set({
-        'Name': product['Name'],
-        'Price': product['Price'],
-        'Image': product['Image'],
-        'id': product['id'],
-        'category': product['category'],
-        'quantity': 1,
-      });
-    }
+  // --- USER DATA ---
+  Future<Map<String, dynamic>?> getUser(String userId) async {
+    final doc = await _firestore.collection('users').doc(userId).get();
+    return doc.data();
   }
+
+  // --- CART ACTIONS ---
+
+  Stream<QuerySnapshot> getCartStream(String userId) {
+    return _firestore
+        .collection('users')
+        .doc(userId)
+        .collection('cart')
+        .snapshots();
+  }
+
+  Future<void> updateCartQuantity(String userId, String productId, int newQuantity) async {
+    await _firestore
+        .collection('users')
+        .doc(userId)
+        .collection('cart')
+        .doc(productId)
+        .update({'quantity': newQuantity});
+  }
+
+  Future<void> removeProductFromCart(String userId, String productId) async {
+    await _firestore
+        .collection('users')
+        .doc(userId)
+        .collection('cart')
+        .doc(productId)
+        .delete();
+  }
+
+  Future<void> addProductToCart(String userId, Map<String, dynamic> product) async {
+    await _firestore
+        .collection('users')
+        .doc(userId)
+        .collection('cart')
+        .doc(product['id'])
+        .set(product);
+  }
+
   ///TODO : add logic for address parameter
   /// Handles the complex transaction of placing an order
   // ===========================================================================
@@ -90,7 +112,6 @@ class DatabaseMethods {
     required String userId,
     required List<Map<String, dynamic>> cartItems,
     required String address,
-    required var cartProvider, // Pass provider to clear it later
   }) async {
     try {
       final WriteBatch batch = FirebaseFirestore.instance.batch();
@@ -171,9 +192,8 @@ class DatabaseMethods {
         batch.set(sellerOrderRef, sellerViewData);
       }
 
-      // 3. COMMIT & CLEAR CART
+      // 3. COMMIT
       await batch.commit();
-      cartProvider.clearCart(); // Clear local cart
 
       return "Order placed successfully!";
     } catch (e) {
@@ -191,8 +211,15 @@ class DatabaseMethods {
   }) async {
     try {
       DocumentReference productRef = _firestore.collection('products').doc(productId);
-      DocumentSnapshot productSnap = await productRef.get();
       
+      // 1. Check for duplicate review
+      final reviewDocRef = productRef.collection('reviews').doc(userId);
+      final docSnap = await reviewDocRef.get();
+      if (docSnap.exists) {
+        return "You have already reviewed this product.";
+      }
+
+      DocumentSnapshot productSnap = await productRef.get();
       if (!productSnap.exists) return "Product not found";
 
       Map<String, dynamic> productData = productSnap.data() as Map<String, dynamic>;
@@ -205,22 +232,21 @@ class DatabaseMethods {
 
       WriteBatch batch = _firestore.batch();
 
-      // 1. Add Review to Subcollection
-      DocumentReference reviewRef = productRef.collection('reviews').doc(userId); // Use userId as doc ID to prevent duplicates
-      batch.set(reviewRef, {
+      // 2. Add Review to Subcollection
+      batch.set(reviewDocRef, {
         'userId': userId,
         'rating': rating,
         'reviewText': reviewText,
         'timestamp': FieldValue.serverTimestamp(),
       });
 
-      // 2. Update GLOBAL Product Stats
+      // 3. Update GLOBAL Product Stats
       batch.update(productRef, {
         'averageRating': newAvg,
         'reviewCount': FieldValue.increment(1),
       });
 
-      // 3. ✅ FIX: Update CITY Product Stats (So it shows on Home Page)
+      // 4. ✅ FIX: Update CITY Product Stats (So it shows on Home Page)
       // We try to find the city from the product data. Default to 'Jaipur' if missing.
       String city = productData['city'] ?? 'Jaipur'; 
       

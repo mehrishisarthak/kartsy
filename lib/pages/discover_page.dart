@@ -2,8 +2,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ecommerce_shop/pages/product_details.dart';
 import 'package:ecommerce_shop/pages/search_page.dart';
+import 'package:ecommerce_shop/services/shimmer/product_skelleton_list_vertical.dart';
 import 'package:flutter/material.dart';
-import 'package:shimmer/shimmer.dart';
 
 class DiscoverPage extends StatefulWidget {
   final String userCity;
@@ -154,45 +154,6 @@ class _DiscoverPageState extends State<DiscoverPage> {
           Text(text,
               style: textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
         ],
-      ),
-    );
-  }
-
-  Widget _buildProductShimmer() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 5)),
-        ],
-      ),
-      child: Shimmer.fromColors(
-        baseColor: Colors.grey[300]!,
-        highlightColor: Colors.grey[100]!,
-        child: Row(
-          children: [
-            Container(width: 100, height: 100, color: Colors.white),
-            const SizedBox(width: 20),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(width: 120, height: 14, color: Colors.white),
-                  const SizedBox(height: 8),
-                  Container(width: 80, height: 12, color: Colors.white),
-                  const SizedBox(height: 8),
-                  Container(width: 100, height: 16, color: Colors.white),
-                ],
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -374,12 +335,9 @@ class _DiscoverPageState extends State<DiscoverPage> {
           ),
 
           // 3. Loading Indicator / Shimmer at bottom
-          if (_isLoading || _hasMore)
-            SliverToBoxAdapter(
-              child: Column(
-                children: List.generate(
-                    3, (index) => _buildProductShimmer()),
-              ),
+          if (_isLoading)
+            const SliverToBoxAdapter(
+              child: VerticalProductsSkeleton(),
             ),
             
           // Extra padding for bottom

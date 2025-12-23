@@ -42,100 +42,108 @@ class SettingsPage extends StatelessWidget {
   }
 
   Widget _buildThemeSelector(BuildContext context, ThemeProvider themeProvider) {
-  final theme = Theme.of(context);
-  final isDark = theme.brightness == Brightness.dark;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
-  return Card(
-    elevation: 2,
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(16),
-    ),
-    // REMOVED: Expanded widget
-    child: Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            "App Appearance",
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 16),
-          
-          // This LayoutBuilder is what actually prevents the overflow
-          LayoutBuilder(
-            builder: (context, constraints) {
-              // Calculate width dynamically based on parent width
-              final double buttonWidth = (constraints.maxWidth - 5) / 3;
-    
-              return ToggleButtons(
-                borderRadius: BorderRadius.circular(12.0),
-                borderWidth: 1.5,
-                borderColor: theme.colorScheme.outline.withOpacity(0.3),
-                selectedBorderColor: theme.colorScheme.primary,
-                
-                fillColor: theme.colorScheme.primary,
-                selectedColor: theme.colorScheme.onPrimary,
-                
-                color: isDark ? Colors.white70 : Colors.black54,
-                
-                constraints: BoxConstraints(
-                  minHeight: 50.0,
-                  // This forces the buttons to fit exactly within the card
-                  minWidth: buttonWidth, 
-                ),
-                
-                isSelected: [
-                  themeProvider.themeMode == ThemeMode.light,
-                  themeProvider.themeMode == ThemeMode.dark,
-                  themeProvider.themeMode == ThemeMode.system,
-                ],
-                
-                onPressed: (index) {
-                  const List<ThemeMode> modes = [
-                    ThemeMode.light,
-                    ThemeMode.dark,
-                    ThemeMode.system
-                  ];
-                  themeProvider.setThemeMode(modes[index]);
-                },
-                
-                children: const [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.light_mode_outlined, size: 18),
-                      SizedBox(width: 6),
-                      Text("Light", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                    ],
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.dark_mode_outlined, size: 18),
-                      SizedBox(width: 6),
-                      Text("Dark", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                    ],
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.brightness_auto_outlined, size: 18),
-                      SizedBox(width: 6),
-                      Text("Auto", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                    ],
-                  ),
-                ],
-              );
-            },
-          ),
-        ],
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
       ),
-    ),
-  );
-}
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "App Appearance",
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                // FIX 1: Increased buffer from 5 to 12. 
+                // Borders are 1.5px * 4 lines = 6px total. 
+                // Using 12 provides a safety margin for padding/pixel rounding.
+                final double buttonWidth = (constraints.maxWidth - 12) / 3;
+
+                // FIX 2: Wrapped in FittedBox to scale down content if it 
+                // slightly exceeds width, preventing the overflow error completely.
+                return FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: ToggleButtons(
+                    borderRadius: BorderRadius.circular(12.0),
+                    borderWidth: 1.5,
+                    borderColor: theme.colorScheme.outline.withOpacity(0.3),
+                    selectedBorderColor: theme.colorScheme.primary,
+                    fillColor: theme.colorScheme.primary,
+                    selectedColor: theme.colorScheme.onPrimary,
+                    color: isDark ? Colors.white70 : Colors.black54,
+                    constraints: BoxConstraints(
+                      minHeight: 50.0,
+                      minWidth: buttonWidth, 
+                    ),
+                    isSelected: [
+                      themeProvider.themeMode == ThemeMode.light,
+                      themeProvider.themeMode == ThemeMode.dark,
+                      themeProvider.themeMode == ThemeMode.system,
+                    ],
+                    onPressed: (index) {
+                      const List<ThemeMode> modes = [
+                        ThemeMode.light,
+                        ThemeMode.dark,
+                        ThemeMode.system
+                      ];
+                      themeProvider.setThemeMode(modes[index]);
+                    },
+                    children: const [
+                      // FIX 3: Added horizontal padding inside items to prevent 
+                      // text from touching borders on small screens.
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 4.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.light_mode_outlined, size: 18),
+                            SizedBox(width: 6),
+                            Text("Light", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 4.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.dark_mode_outlined, size: 18),
+                            SizedBox(width: 6),
+                            Text("Dark", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 4.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.brightness_auto_outlined, size: 18),
+                            SizedBox(width: 6),
+                            Text("Auto", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {

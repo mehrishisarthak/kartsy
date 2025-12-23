@@ -2,6 +2,7 @@ import 'package:ecommerce_shop/pages/login_after_signup.dart';
 import 'package:ecommerce_shop/pages/signup.dart';
 import 'package:ecommerce_shop/services/shimmer/signup_shimmer.dart';
 import 'package:ecommerce_shop/utils/authmethods.dart';
+import 'package:ecommerce_shop/utils/show_snackbar.dart';
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // ✅ Added Import
@@ -17,11 +18,13 @@ class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  
+
+  final _passwordFocusNode = FocusNode();
+
   // 🔒 Forgot Password Controllers
   final _forgotEmailController = TextEditingController();
   final _focusEmail = FocusNode();
-  
+
   bool _isLoading = false;
   bool _isPasswordVisible = false;
 
@@ -31,25 +34,14 @@ class _LoginPageState extends State<LoginPage> {
     _passwordController.dispose();
     _forgotEmailController.dispose();
     _focusEmail.dispose();
+    _passwordFocusNode.dispose();
     super.dispose();
-  }
-
-  void _showSnackBar(String message, {bool isError = false, Color? backgroundColor}) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(
-        content: Text(message),
-        backgroundColor: backgroundColor ?? (isError ? Theme.of(context).colorScheme.error : Colors.green),
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 3),
-      ));
   }
 
   // 🔒 FORGOT PASSWORD DIALOG
   Future<void> _showForgotPasswordDialog() async {
     _forgotEmailController.text = _emailController.text; // Pre-fill email
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -75,17 +67,21 @@ class _LoginPageState extends State<LoginPage> {
               final res = await AuthMethods().forgotPassword(
                 email: _forgotEmailController.text.trim(),
               );
-              
+
               Navigator.pop(context);
-              _showSnackBar(
-                res.contains("sent") ? res : res,
-                backgroundColor: res.contains("sent") ? Colors.green : Theme.of(context).colorScheme.error,
+              showCustomSnackBar(
+                context,
+                res,
+                type: res.contains("sent")
+                    ? SnackBarType.success
+                    : SnackBarType.error,
               );
             },
             icon: const Icon(Icons.email_outlined),
             label: const Text("Send Reset Link"),
             style: ElevatedButton.styleFrom(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
             ),
           ),
         ],
@@ -109,28 +105,33 @@ class _LoginPageState extends State<LoginPage> {
 
       if (res.contains("Please verify your email")) {
         setState(() => _isLoading = false);
-        _showSnackBar(res, backgroundColor: Colors.orange.shade700);
+        showCustomSnackBar(context, res, type: SnackBarType.info);
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => const LoginPageAfterSignup()),
+          MaterialPageRoute(
+              builder: (context) => const LoginPageAfterSignup()),
         );
         return;
       }
 
       if (res == "Login successful.") {
-        // ✅ FIX: Mark onboarding as seen
+        showCustomSnackBar(context, "Login Successful!",
+            type: SnackBarType.success);
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('seenOnboarding', true);
 
-        Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+        await Future.delayed(const Duration(seconds: 2));
+        Navigator.of(context)
+            .pushNamedAndRemoveUntil('/home', (route) => false);
       } else {
         setState(() => _isLoading = false);
-        _showSnackBar(res, isError: true);
+        showCustomSnackBar(context, res, type: SnackBarType.error);
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        _showSnackBar("Login failed: ${e.toString()}", isError: true);
+        showCustomSnackBar(context, "Login failed: ${e.toString()}",
+            type: SnackBarType.error);
       }
     }
   }
@@ -140,23 +141,27 @@ class _LoginPageState extends State<LoginPage> {
 
     try {
       String res = await AuthMethods().signInWithGoogle();
-      
+
       if (!mounted) return;
 
       if (res == "Login successful.") {
-        // ✅ FIX: Mark onboarding as seen here too
+        showCustomSnackBar(context, "Google Sign-In Successful!",
+            type: SnackBarType.success);
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('seenOnboarding', true);
 
-        Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+        await Future.delayed(const Duration(seconds: 2));
+        Navigator.of(context)
+            .pushNamedAndRemoveUntil('/home', (route) => false);
       } else {
         setState(() => _isLoading = false);
-        _showSnackBar(res, isError: true);
+        showCustomSnackBar(context, res, type: SnackBarType.error);
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        _showSnackBar("Google Sign-In failed", isError: true);
+        showCustomSnackBar(context, "Google Sign-In failed. Please try again.",
+            type: SnackBarType.error);
       }
     }
   }
@@ -183,9 +188,11 @@ class _LoginPageState extends State<LoginPage> {
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
               child: Form(
                 key: _formKey,
+                autovalidateMode: AutovalidateMode.onUserInteraction,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -194,7 +201,8 @@ class _LoginPageState extends State<LoginPage> {
                       'images/login.json',
                       height: 220,
                       fit: BoxFit.contain,
-                      errorBuilder: (c, e, s) => const Icon(Icons.login, size: 80),
+                      errorBuilder: (c, e, s) =>
+                          const Icon(Icons.login, size: 80),
                     ),
                     const SizedBox(height: 24),
 
@@ -210,7 +218,8 @@ class _LoginPageState extends State<LoginPage> {
                     Text(
                       "Login to continue",
                       textAlign: TextAlign.center,
-                      style: textTheme.titleMedium?.copyWith(color: Colors.grey[600]),
+                      style: textTheme.titleMedium
+                          ?.copyWith(color: Colors.grey[600]),
                     ),
                     const SizedBox(height: 32),
 
@@ -219,9 +228,14 @@ class _LoginPageState extends State<LoginPage> {
                       hintText: "Email Address",
                       icon: Icons.email_outlined,
                       keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
+                      onEditingComplete: () =>
+                          _passwordFocusNode.requestFocus(),
                       validator: (val) {
-                        if (val == null || val.isEmpty) return "Enter your email";
-                        if (!RegExp(r'\S+@\S+\.\S+').hasMatch(val)) return "Invalid email address";
+                        if (val == null || val.isEmpty)
+                          return "Enter your email";
+                        if (!RegExp(r'\S+@\S+\.\S+').hasMatch(val))
+                          return "Invalid email address";
                         return null;
                       },
                     ),
@@ -229,7 +243,7 @@ class _LoginPageState extends State<LoginPage> {
 
                     _buildPasswordField(),
                     const SizedBox(height: 10),
-                    
+
                     _buildForgotPasswordButton(),
                     const SizedBox(height: 20),
 
@@ -259,11 +273,15 @@ class _LoginPageState extends State<LoginPage> {
     required IconData icon,
     TextInputType keyboardType = TextInputType.text,
     String? Function(String?)? validator,
+    TextInputAction? textInputAction,
+    VoidCallback? onEditingComplete,
   }) {
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
       validator: validator,
+      textInputAction: textInputAction,
+      onEditingComplete: onEditingComplete,
       decoration: InputDecoration(
         hintText: hintText,
         prefixIcon: Icon(icon, color: Colors.grey[500]),
@@ -279,8 +297,11 @@ class _LoginPageState extends State<LoginPage> {
   Widget _buildPasswordField() {
     return TextFormField(
       controller: _passwordController,
+      focusNode: _passwordFocusNode,
       obscureText: !_isPasswordVisible,
       validator: (val) => val!.isEmpty ? "Enter your password" : null,
+      textInputAction: TextInputAction.done,
+      onEditingComplete: _handleLogin,
       decoration: InputDecoration(
         hintText: "Password",
         prefixIcon: Icon(Icons.lock_outline, color: Colors.grey[500]),
@@ -290,11 +311,13 @@ class _LoginPageState extends State<LoginPage> {
           borderSide: BorderSide(color: Colors.grey.shade300),
         ),
         suffixIcon: IconButton(
+          tooltip: "Toggle password visibility",
           icon: Icon(
             _isPasswordVisible ? Icons.visibility_off : Icons.visibility,
             color: Colors.grey[500],
           ),
-          onPressed: () => setState(() => _isPasswordVisible = !_isPasswordVisible),
+          onPressed: () =>
+              setState(() => _isPasswordVisible = !_isPasswordVisible),
         ),
       ),
     );
@@ -343,7 +366,9 @@ class _LoginPageState extends State<LoginPage> {
         Expanded(child: Divider(color: Colors.grey[400])),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12.0),
-          child: Text("OR", style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.w500)),
+          child: Text("OR",
+              style: TextStyle(
+                  color: Colors.grey[600], fontWeight: FontWeight.w500)),
         ),
         Expanded(child: Divider(color: Colors.grey[400])),
       ],
@@ -356,11 +381,14 @@ class _LoginPageState extends State<LoginPage> {
       height: 55,
       child: OutlinedButton.icon(
         onPressed: _isLoading ? null : _handleGoogleLogin,
-        icon: Image.asset('images/icons/google.png', height: 24.0, errorBuilder: (c,e,s) => const Icon(Icons.login)),
+        icon: Image.asset('images/icons/google.png',
+            height: 24.0,
+            errorBuilder: (c, e, s) => const Icon(Icons.login)),
         label: Text("Sign in with Google", style: theme.textTheme.labelLarge),
         style: OutlinedButton.styleFrom(
           side: BorderSide(color: Colors.grey.shade300),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       ),
     );
@@ -372,12 +400,18 @@ class _LoginPageState extends State<LoginPage> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text("Don't have an account?", style: textTheme.bodyMedium?.copyWith(color: Colors.grey[700])),
+        Text("Don't have an account?",
+            style: textTheme.bodyMedium?.copyWith(color: Colors.grey[700])),
         TextButton(
           onPressed: () {
-            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const SignupPage()));
+            Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                    builder: (context) => const SignupPage()));
           },
-          child: Text("Sign Up", style: textTheme.bodyMedium?.copyWith(color: colorScheme.primary, fontWeight: FontWeight.bold)),
+          child: Text("Sign Up",
+              style: textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.primary, fontWeight: FontWeight.bold)),
         )
       ],
     );

@@ -3,13 +3,16 @@ import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
 class ProductVideoPlayer extends StatefulWidget {
   final String videoUrl;
-  const ProductVideoPlayer({super.key, required this.videoUrl});
+  final Function(YoutubePlayerController)? onPlayerCreated;
+  const ProductVideoPlayer(
+      {super.key, required this.videoUrl, this.onPlayerCreated});
 
   @override
   State<ProductVideoPlayer> createState() => _ProductVideoPlayerState();
 }
 
-class _ProductVideoPlayerState extends State<ProductVideoPlayer> with WidgetsBindingObserver {
+class _ProductVideoPlayerState extends State<ProductVideoPlayer>
+    with WidgetsBindingObserver {
   late YoutubePlayerController _controller;
   bool _isPlayerReady = false;
 
@@ -17,7 +20,7 @@ class _ProductVideoPlayerState extends State<ProductVideoPlayer> with WidgetsBin
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    
+
     final videoId = YoutubePlayer.convertUrlToId(widget.videoUrl);
 
     _controller = YoutubePlayerController(
@@ -30,29 +33,25 @@ class _ProductVideoPlayerState extends State<ProductVideoPlayer> with WidgetsBin
         isLive: false,
         forceHD: false,
         enableCaption: true,
-        hideControls: false, 
+        hideControls: false,
       ),
     )..addListener(_listener);
+    widget.onPlayerCreated?.call(_controller);
   }
 
   void _listener() {
-    if (_isPlayerReady && mounted && !_controller.value.isFullScreen) {
-    }
-  }
-
-  @override
-  void deactivate() {
-    _controller.pause();
-    super.deactivate();
+    if (_isPlayerReady && mounted && !_controller.value.isFullScreen) {}
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
+    _controller.pause();
+    _controller.removeListener(_listener);
     _controller.dispose();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
-  
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) {
@@ -69,7 +68,7 @@ class _ProductVideoPlayerState extends State<ProductVideoPlayer> with WidgetsBin
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
-        color: Colors.black, 
+        color: Colors.black,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.1),
@@ -84,7 +83,7 @@ class _ProductVideoPlayerState extends State<ProductVideoPlayer> with WidgetsBin
           controller: _controller,
           showVideoProgressIndicator: true,
           progressIndicatorColor: Theme.of(context).primaryColor,
-          aspectRatio: 16 / 9, 
+          aspectRatio: 16 / 9,
           onReady: () {
             _isPlayerReady = true;
           },

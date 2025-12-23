@@ -1,5 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:ecommerce_shop/utils/database.dart';
+import 'package:ecommerce_shop/services/firestore_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
@@ -60,23 +59,8 @@ class _AddReviewPageState extends State<AddReviewPage> {
       final productId = widget.productData['id'];
       if (productId == null) throw Exception("Product ID is missing.");
 
-      // 1. Check for duplicate review (Prevent spam)
-      final reviewDocRef = FirebaseFirestore.instance
-          .collection('products')
-          .doc(productId)
-          .collection('reviews')
-          .doc(userId);
-
-      final docSnap = await reviewDocRef.get();
-
-      if (docSnap.exists) {
-        _showSnackBar("You have already reviewed this product.", isError: true);
-        return;
-      }
-
-      // 2. Submit to Database
-      // Note: Your DatabaseMethods().addReview must handle the 'averageRating' calculation!
-      final result = await DatabaseMethods().addReview(
+      // Submit to Database via FirestoreService
+      final result = await FirestoreService().addReview(
         productId: productId,
         userId: userId,
         rating: _rating.toInt(),

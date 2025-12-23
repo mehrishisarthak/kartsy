@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:dio/dio.dart'; // Import Dio
+import 'package:dio/dio.dart';
 import 'package:ecommerce_shop/pages/profile.dart';
 import 'package:ecommerce_shop/services/cart_provider.dart';
 import 'package:ecommerce_shop/services/lead_provider.dart';
@@ -12,12 +12,14 @@ import 'package:ecommerce_shop/services/shimmer/button_shimmer.dart';
 import 'package:ecommerce_shop/services/shimmer/product_details_shimmer.dart';
 import 'package:ecommerce_shop/services/video_player.dart';
 import 'package:ecommerce_shop/utils/constants.dart';
+import 'package:ecommerce_shop/utils/show_snackbar.dart';
+import 'package:ecommerce_shop/widget/review_card_shimmer.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:path_provider/path_provider.dart'; // Import Path Provider
 import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
 class ProductDetails extends StatefulWidget {
   final String productId;
@@ -30,6 +32,7 @@ class ProductDetails extends StatefulWidget {
 class _ProductDetailsState extends State<ProductDetails> {
   late Stream<DocumentSnapshot> _productStream;
   bool _isLoading = false;
+  YoutubePlayerController? _videoController;
 
   // Review Pagination
   final List<DocumentSnapshot> _reviews = [];
@@ -56,7 +59,18 @@ class _ProductDetailsState extends State<ProductDetails> {
     _fetchReviews();
   }
 
-  Future<void> _handleDownloadAndOpenModel(String modelUrl, String productName) async {
+  @override
+  void dispose() {
+    // --- CRITICAL FIX ---
+    // We do NOT dispose or pause _videoController here.
+    // The child widget 'ProductVideoPlayer' owns the controller (it creates it in initState)
+    // and it handles the dispose() call internally.
+    // Calling it here results in a "Double Disposal" crash.
+    super.dispose();
+  }
+
+  Future<void> _handleDownloadAndOpenModel(
+      String modelUrl, String productName) async {
     // 1. Get the directory
     final dir = await getApplicationDocumentsDirectory();
     final fileName = "${widget.productId}_model.glb";
@@ -112,10 +126,12 @@ class _ProductDetailsState extends State<ProductDetails> {
       if (await file.exists()) {
         await file.delete();
       }
-      
+
       if (mounted) {
         setState(() => _isDownloadingModel = false);
-        _showSnackBar("Failed to download 3D model. Check connection.", isError: true);
+        showCustomSnackBar(
+            context, "Failed to download 3D model. Check connection.",
+            type: SnackBarType.error);
         debugPrint("Download Error: $e");
       }
     }
@@ -158,31 +174,22 @@ class _ProductDetailsState extends State<ProductDetails> {
     setState(() => _isLoading = true);
     try {
       final userId = FirebaseAuth.instance.currentUser?.uid;
-      if (userId == null) throw Exception('You must be logged in to add items.');
+      if (userId == null) {
+        showCustomSnackBar(context, "You must be logged in to add items to cart.", type: SnackBarType.error);
+        return;
+      }
 
       if (mounted) {
         await Provider.of<CartProvider>(context, listen: false)
             .addToCart(userId, productData);
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("✅ Added to cart!"),
-              backgroundColor: Colors.green,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
+          showCustomSnackBar(context, "Added to cart!", type: SnackBarType.success);
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Error: ${e.toString()}"),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        showCustomSnackBar(context, "Error: ${e.toString()}", type: SnackBarType.error);
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -196,20 +203,23 @@ class _ProductDetailsState extends State<ProductDetails> {
   ) async {
     final userId = FirebaseAuth.instance.currentUser?.uid;
     if (userId == null) {
-      _showSnackBar("You must be logged in to express interest.", isError: true);
+      showCustomSnackBar(context, "You must be logged in to express interest.",
+          type: SnackBarType.error);
       return;
     }
 
     final leadsProvider = Provider.of<LeadsProvider>(context, listen: false);
     if (leadsProvider.isProductInInterests(widget.productId)) {
-      _showSnackBar("Already in your interests!", isError: false);
+      showCustomSnackBar(context, "This item is already in your interest list.",
+          type: SnackBarType.info);
       return;
     }
 
     setState(() => _isLoading = true);
 
     try {
-      final userDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
+      final userDoc =
+          await FirebaseFirestore.instance.collection('users').doc(userId).get();
       final userData = userDoc.data();
       final address = userData?['Address'] as Map<String, dynamic>?;
 
@@ -217,11 +227,14 @@ class _ProductDetailsState extends State<ProductDetails> {
           (address['state'] as String?)?.isEmpty == true ||
           (address['city'] as String?)?.isEmpty == true ||
           (address['mobile'] as String?)?.isEmpty == true) {
-        _showSnackBar("Please complete your profile to contact sellers.", isError: true);
+        showCustomSnackBar(
+            context, "Please complete your profile to contact sellers.",
+            type: SnackBarType.error);
 
         if (mounted) {
           Navigator.of(context).push(
-            MaterialPageRoute(builder: (context) => ProfilePage(userId: userId)),
+            MaterialPageRoute(
+                builder: (context) => ProfilePage(userId: userId)),
           );
         }
         return;
@@ -231,7 +244,8 @@ class _ProductDetailsState extends State<ProductDetails> {
         _showInterestDialog(context, userId, productData, userData, address);
       }
     } catch (e) {
-      _showSnackBar("Error verifying profile: $e", isError: true);
+      showCustomSnackBar(context, "Error verifying profile: $e",
+          type: SnackBarType.error);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -244,7 +258,8 @@ class _ProductDetailsState extends State<ProductDetails> {
     Map<String, dynamic>? userData,
     Map<String, dynamic> address,
   ) {
-    final emailController = TextEditingController(text: userData?['Email'] ?? '');
+    final emailController =
+        TextEditingController(text: userData?['Email'] ?? '');
     String rawPhone = address['mobile'] ?? '';
     if (rawPhone.startsWith('+91')) rawPhone = rawPhone.substring(3);
     final phoneController = TextEditingController(text: rawPhone);
@@ -252,8 +267,32 @@ class _ProductDetailsState extends State<ProductDetails> {
     String? selectedCity = address['city'];
     String? selectedState = address['state'];
 
-    final cities = ['Agartala', 'Delhi', 'Mumbai', 'Bangalore', 'Hyderabad', 'Chennai', 'Kolkata', 'Pune', 'Ahmedabad', 'Jaipur', 'Other'];
-    final states = ['Tripura', 'Delhi', 'Maharashtra', 'Karnataka', 'Telangana', 'Tamil Nadu', 'West Bengal', 'Uttar Pradesh', 'Gujarat', 'Rajasthan', 'Other'];
+    final cities = [
+      'Agartala',
+      'Delhi',
+      'Mumbai',
+      'Bangalore',
+      'Hyderabad',
+      'Chennai',
+      'Kolkata',
+      'Pune',
+      'Ahmedabad',
+      'Jaipur',
+      'Other'
+    ];
+    final states = [
+      'Tripura',
+      'Delhi',
+      'Maharashtra',
+      'Karnataka',
+      'Telangana',
+      'Tamil Nadu',
+      'West Bengal',
+      'Uttar Pradesh',
+      'Gujarat',
+      'Rajasthan',
+      'Other'
+    ];
 
     if (!cities.contains(selectedCity)) selectedCity = 'Other';
     if (!states.contains(selectedState)) selectedState = 'Other';
@@ -267,41 +306,61 @@ class _ProductDetailsState extends State<ProductDetails> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Your details will be shared with the seller.', style: Theme.of(context).textTheme.bodySmall),
+              Text('Your details will be shared with the seller.',
+                  style: Theme.of(context).textTheme.bodySmall),
               const SizedBox(height: 20),
-              TextField(controller: emailController, decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.email))),
+              TextField(
+                  controller: emailController,
+                  decoration: const InputDecoration(
+                      labelText: 'Email', prefixIcon: Icon(Icons.email))),
               const SizedBox(height: 12),
-              TextField(controller: phoneController, decoration: const InputDecoration(labelText: 'Phone', prefixIcon: Icon(Icons.phone))),
+              TextField(
+                  controller: phoneController,
+                  decoration: const InputDecoration(
+                      labelText: 'Phone', prefixIcon: Icon(Icons.phone))),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 value: selectedCity,
-                items: cities.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                items: cities
+                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                    .toList(),
                 onChanged: (v) => selectedCity = v,
-                decoration: const InputDecoration(labelText: 'City', prefixIcon: Icon(Icons.location_city)),
+                decoration: const InputDecoration(
+                    labelText: 'City', prefixIcon: Icon(Icons.location_city)),
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 value: selectedState,
-                items: states.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                items: states
+                    .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                    .toList(),
                 onChanged: (v) => selectedState = v,
-                decoration: const InputDecoration(labelText: 'State', prefixIcon: Icon(Icons.map)),
+                decoration: const InputDecoration(
+                    labelText: 'State', prefixIcon: Icon(Icons.map)),
               ),
             ],
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel")),
           ElevatedButton(
             onPressed: _isAddingToInterests
                 ? null
                 : () async {
-                    if (emailController.text.isEmpty || phoneController.text.length != 10) {
-                      _showSnackBar("Please check email and phone.", isError: true);
+                    if (emailController.text.isEmpty ||
+                        phoneController.text.length != 10) {
+                      showCustomSnackBar(
+                          context, "Please provide a valid email and phone number.",
+                          type: SnackBarType.error);
                       return;
                     }
                     setState(() => _isAddingToInterests = true);
                     try {
-                      final result = await Provider.of<LeadsProvider>(context, listen: false).addLead(
+                      final result = await Provider.of<LeadsProvider>(context,
+                              listen: false)
+                          .addLead(
                         userId: userId,
                         productId: widget.productId,
                         productData: productData,
@@ -313,29 +372,26 @@ class _ProductDetailsState extends State<ProductDetails> {
                       );
                       if (mounted) {
                         Navigator.pop(context);
-                        _showSnackBar(result, isError: false);
+                        showCustomSnackBar(context, result,
+                            type: SnackBarType.success);
                       }
                     } catch (e) {
-                      if (mounted) _showSnackBar("Error: $e", isError: true);
+                      if (mounted)
+                        showCustomSnackBar(context, "Error: $e",
+                            type: SnackBarType.error);
                     } finally {
-                      if (mounted) setState(() => _isAddingToInterests = false);
+                      if (mounted)
+                        setState(() => _isAddingToInterests = false);
                     }
                   },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[600], foregroundColor: Colors.white),
-            child: _isAddingToInterests ? const ButtonShimmer() : const Text("Send to Seller"),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange[600],
+                foregroundColor: Colors.white),
+            child: _isAddingToInterests
+                ? const ButtonShimmer()
+                : const Text("Send to Seller"),
           ),
         ],
-      ),
-    );
-  }
-
-  void _showSnackBar(String message, {required bool isError}) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: isError ? Colors.red : Colors.green,
-        behavior: SnackBarBehavior.floating,
       ),
     );
   }
@@ -350,17 +406,20 @@ class _ProductDetailsState extends State<ProductDetails> {
         }
 
         if (!snapshot.hasData || !snapshot.data!.exists) {
-          return const Scaffold(body: Center(child: Text("Product not found.")));
+          return const Scaffold(
+              body: Center(child: Text("Product not found.")));
         }
 
         final product = snapshot.data!.data() as Map<String, dynamic>;
 
-        final int inventory = int.tryParse(product['inventory']?.toString() ?? '0') ?? 0;
+        final int inventory =
+            int.tryParse(product['inventory']?.toString() ?? '0') ?? 0;
         List<dynamic> rawImages = product['images'] ?? [];
         if (rawImages.isEmpty && product['Image'] != null) {
           rawImages = [product['Image']];
         }
-        final List<String> imageUrls = rawImages.map((e) => e.toString()).toList();
+        final List<String> imageUrls =
+            rawImages.map((e) => e.toString()).toList();
 
         final String? videoUrl = product['videoUrl'];
         final bool hasVideo = videoUrl != null && videoUrl.isNotEmpty;
@@ -371,7 +430,8 @@ class _ProductDetailsState extends State<ProductDetails> {
         final String? modelUrl = product['modelUrl'];
         final bool hasModel = modelUrl != null && modelUrl.isNotEmpty;
 
-        final double averageRating = (product['averageRating'] as num?)?.toDouble() ?? 0.0;
+        final double averageRating =
+            (product['averageRating'] as num?)?.toDouble() ?? 0.0;
         final int reviewCount = (product['reviewCount'] as num?)?.toInt() ?? 0;
 
         return Scaffold(
@@ -400,12 +460,18 @@ class _ProductDetailsState extends State<ProductDetails> {
                     children: [
                       Text(
                         product['Name'] ?? 'No Name',
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineSmall
+                            ?.copyWith(fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 10),
                       Text(
                         '₹${product['Price'] ?? '--'}',
-                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineMedium
+                            ?.copyWith(
                               fontWeight: FontWeight.w900,
                               color: Theme.of(context).colorScheme.primary,
                             ),
@@ -422,27 +488,34 @@ class _ProductDetailsState extends State<ProductDetails> {
                           decoration: BoxDecoration(
                             color: Colors.blue.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                            border:
+                                Border.all(color: Colors.blue.withOpacity(0.3)),
                           ),
                           child: Column(
                             children: [
                               Row(
                                 children: [
-                                  const Icon(Icons.view_in_ar, color: Colors.blue, size: 30),
+                                  const Icon(Icons.view_in_ar,
+                                      color: Colors.blue, size: 30),
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         const Text(
                                           "View in 3D & AR",
-                                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 16),
                                         ),
                                         Text(
-                                          _isDownloadingModel 
-                                            ? "Downloading model..." 
-                                            : "Visualize this product in your space",
-                                          style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                          _isDownloadingModel
+                                              ? "Downloading model..."
+                                              : "Visualize this product in your space",
+                                          style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey),
                                         ),
                                       ],
                                     ),
@@ -450,17 +523,23 @@ class _ProductDetailsState extends State<ProductDetails> {
                                   ElevatedButton(
                                     onPressed: _isDownloadingModel
                                         ? null
-                                        : () => _handleDownloadAndOpenModel(modelUrl!, product['Name'] ?? 'Product'),
+                                        : () => _handleDownloadAndOpenModel(
+                                            modelUrl!,
+                                            product['Name'] ?? 'Product'),
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: Colors.blue,
                                       foregroundColor: Colors.white,
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                      shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(8)),
                                     ),
                                     child: _isDownloadingModel
                                         ? const SizedBox(
                                             width: 20,
                                             height: 20,
-                                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                            child: CircularProgressIndicator(
+                                                color: Colors.white,
+                                                strokeWidth: 2),
                                           )
                                         : const Text("View"),
                                   ),
@@ -468,7 +547,9 @@ class _ProductDetailsState extends State<ProductDetails> {
                               ),
                               if (_isDownloadingModel) ...[
                                 const SizedBox(height: 10),
-                                LinearProgressIndicator(value: _downloadProgress, borderRadius: BorderRadius.circular(4)),
+                                LinearProgressIndicator(
+                                    value: _downloadProgress,
+                                    borderRadius: BorderRadius.circular(4)),
                               ]
                             ],
                           ),
@@ -477,20 +558,40 @@ class _ProductDetailsState extends State<ProductDetails> {
                       // -------------------------------------
 
                       const SizedBox(height: 20),
-                      Text('Details', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                      Text('Details',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleLarge
+                              ?.copyWith(fontWeight: FontWeight.bold)),
                       const SizedBox(height: 10),
                       Text(
                         product['Description'] ?? "No description provided.",
-                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Colors.grey[700], height: 1.5),
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyLarge
+                            ?.copyWith(color: Colors.grey[700], height: 1.5),
                       ),
                       if (hasVideo) ...[
                         const SizedBox(height: 30),
-                        Text('Product Video', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                        Text('Product Video',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleLarge
+                                ?.copyWith(fontWeight: FontWeight.bold)),
                         const SizedBox(height: 15),
-                        ProductVideoPlayer(videoUrl: videoUrl),
+                        ProductVideoPlayer(
+                          videoUrl: videoUrl,
+                          onPlayerCreated: (controller) {
+                            _videoController = controller;
+                          },
+                        ),
                       ],
                       const SizedBox(height: 30),
-                      Text('Customer Reviews', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                      Text('Customer Reviews',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleLarge
+                              ?.copyWith(fontWeight: FontWeight.bold)),
                       const SizedBox(height: 15),
                       // ... (Remaining Review Widgets stay exactly the same)
                       _buildReviewSection(context, averageRating, reviewCount),
@@ -505,9 +606,11 @@ class _ProductDetailsState extends State<ProductDetails> {
                       padding: EdgeInsets.all(40),
                       child: Column(
                         children: [
-                          Icon(Icons.reviews_outlined, size: 64, color: Colors.grey),
+                          Icon(Icons.reviews_outlined,
+                              size: 64, color: Colors.grey),
                           SizedBox(height: 8),
-                          Text("No reviews yet.", style: TextStyle(color: Colors.grey)),
+                          Text("No reviews yet.",
+                              style: TextStyle(color: Colors.grey)),
                         ],
                       ),
                     ),
@@ -517,7 +620,8 @@ class _ProductDetailsState extends State<ProductDetails> {
                 SliverList(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
-                      final data = _reviews[index].data() as Map<String, dynamic>;
+                      final data =
+                          _reviews[index].data() as Map<String, dynamic>;
                       return Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 20),
                         child: _buildReviewCard(data),
@@ -532,11 +636,16 @@ class _ProductDetailsState extends State<ProductDetails> {
                   child: Column(
                     children: [
                       if (_isLoadingReviews)
-                        Column(children: List.generate(2, (index) => _buildReviewShimmer())),
-                      if (_hasMoreReviews && !_isLoadingReviews && _reviews.isNotEmpty)
+                        Column(
+                            children: List.generate(
+                                2, (index) => const ReviewCardShimmer())),
+                      if (_hasMoreReviews &&
+                          !_isLoadingReviews &&
+                          _reviews.isNotEmpty)
                         TextButton.icon(
                           onPressed: _fetchReviews,
-                          icon: const Icon(Icons.arrow_downward_rounded, size: 18),
+                          icon: const Icon(Icons.arrow_downward_rounded,
+                              size: 18),
                           label: const Text("Load More Reviews"),
                         ),
                       const SizedBox(height: 80),
@@ -555,69 +664,89 @@ class _ProductDetailsState extends State<ProductDetails> {
   }
 
   // Extracted Review Section to keep build method clean
-  Widget _buildReviewSection(BuildContext context, double averageRating, int reviewCount) {
-     return Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.primary.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Theme.of(context).colorScheme.primary.withOpacity(0.1)),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Column(
-              children: [
-                Text(
-                  averageRating.toStringAsFixed(1),
-                  style: TextStyle(
-                    fontSize: 36,
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
+  Widget _buildReviewSection(
+      BuildContext context, double averageRating, int reviewCount) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primary.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+            color: Theme.of(context).colorScheme.primary.withOpacity(0.1)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Column(
+            children: [
+              Text(
+                averageRating.toStringAsFixed(1),
+                style: TextStyle(
+                  fontSize: 36,
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.primary,
                 ),
-                RatingBarIndicator(
-                  rating: averageRating,
-                  itemBuilder: (context, index) => const Icon(Icons.star, color: Colors.amber),
-                  itemCount: 5,
-                  itemSize: 20.0,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  "$reviewCount Ratings",
-                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                ),
-              ],
-            ),
-          ],
-        ),
-      );
+              ),
+              RatingBarIndicator(
+                rating: averageRating,
+                itemBuilder: (context, index) =>
+                    const Icon(Icons.star, color: Colors.amber),
+                itemCount: 5,
+                itemSize: 20.0,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                "$reviewCount Ratings",
+                style: TextStyle(color: Colors.grey[600], fontSize: 12),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
   // --- EXISTING SUB-WIDGETS (Unchanged logic, just keeping them here) ---
 
-  Widget _buildAddToCartBottomBar(BuildContext context, int inventory, Map<String, dynamic> product) {
+  Widget _buildAddToCartBottomBar(
+      BuildContext context, int inventory, Map<String, dynamic> product) {
     final colorScheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: colorScheme.surface,
-        boxShadow: [BoxShadow(color: Colors.black.withAlpha(25), blurRadius: 10, offset: const Offset(0, -4))],
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withAlpha(25),
+              blurRadius: 10,
+              offset: const Offset(0, -4))
+        ],
       ),
       child: SafeArea(
         child: SizedBox(
           height: 55,
           child: ElevatedButton(
-            onPressed: inventory == 0 || _isLoading ? null : () => _handleAddToCart(product),
+            onPressed: inventory == 0 || _isLoading
+                ? null
+                : () => _handleAddToCart(product),
             style: ElevatedButton.styleFrom(
-              backgroundColor: inventory == 0 ? Colors.red : (inventory < 10 ? Colors.amber : colorScheme.primary),
-              foregroundColor: inventory == 0 || inventory < 10 ? Colors.white : colorScheme.onPrimary,
+              backgroundColor: inventory == 0
+                  ? Colors.red
+                  : (inventory < 10 ? Colors.amber : colorScheme.primary),
+              foregroundColor: inventory == 0 || inventory < 10
+                  ? Colors.white
+                  : colorScheme.onPrimary,
             ),
             child: _isLoading
                 ? const ButtonShimmer()
                 : Text(
-                    inventory == 0 ? "Out of Stock" : (inventory < 10 ? "Only $inventory left!" : "Add to Cart"),
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    inventory == 0
+                        ? "Out of Stock"
+                        : (inventory < 10
+                            ? "Only $inventory left!"
+                            : "Add to Cart"),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 16),
                   ),
           ),
         ),
@@ -625,23 +754,35 @@ class _ProductDetailsState extends State<ProductDetails> {
     );
   }
 
-  Widget _buildLeadGenerationBottomBar(BuildContext context, Map<String, dynamic> product) {
+  Widget _buildLeadGenerationBottomBar(
+      BuildContext context, Map<String, dynamic> product) {
     final colorScheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: colorScheme.surface,
-        boxShadow: [BoxShadow(color: Colors.black.withAlpha(25), blurRadius: 10, offset: const Offset(0, -4))],
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withAlpha(25),
+              blurRadius: 10,
+              offset: const Offset(0, -4))
+        ],
       ),
       child: SafeArea(
         child: SizedBox(
           height: 55,
           child: ElevatedButton(
-            onPressed: _isAddingToInterests ? null : () => _handleAddToInterests(context, product),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[600], foregroundColor: Colors.white),
+            onPressed: _isAddingToInterests
+                ? null
+                : () => _handleAddToInterests(context, product),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange[600],
+                foregroundColor: Colors.white),
             child: _isAddingToInterests
                 ? const ButtonShimmer()
-                : const Text("I'm Interested in This Product", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                : const Text("I'm Interested in This Product",
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           ),
         ),
       ),
@@ -654,55 +795,25 @@ class _ProductDetailsState extends State<ProductDetails> {
       children: [
         RatingBarIndicator(
           rating: rating,
-          itemBuilder: (context, index) => const Icon(Icons.star, color: Colors.amber),
+          itemBuilder: (context, index) =>
+              const Icon(Icons.star, color: Colors.amber),
           itemCount: 5,
           itemSize: 20.0,
         ),
         const SizedBox(width: 8),
-        Text('$rating ($count reviews)', style: const TextStyle(color: Colors.grey)),
+        Text('$rating ($count reviews)',
+            style: const TextStyle(color: Colors.grey)),
       ],
-    );
-  }
-
-  Widget _buildReviewShimmer() {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Shimmer.fromColors(
-            baseColor: Colors.grey[300]!,
-            highlightColor: Colors.grey[100]!,
-            child: Container(width: 40, height: 40, decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle)),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Shimmer.fromColors(
-              baseColor: Colors.grey[300]!,
-              highlightColor: Colors.grey[100]!,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(width: 120, height: 12, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4))),
-                  const SizedBox(height: 12),
-                  Container(width: double.infinity, height: 16, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4))),
-                  const SizedBox(height: 8),
-                  Container(width: 200, height: 14, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4))),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 
   Widget _buildReviewCard(Map<String, dynamic> reviewData) {
     final userId = reviewData['userId'];
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('users').doc(userId).snapshots(),
+      stream:
+          FirebaseFirestore.instance.collection('users').doc(userId).snapshots(),
       builder: (context, snapshot) {
-        String userImage = AppConstants.defaultProfileImage; 
+        String userImage = AppConstants.defaultProfileImage;
         String userName = 'Anonymous User';
 
         if (snapshot.hasData && snapshot.data!.exists) {
@@ -723,23 +834,32 @@ class _ProductDetailsState extends State<ProductDetails> {
                     ClipOval(
                       child: CachedNetworkImage(
                         imageUrl: userImage,
-                        width: 40, height: 40, fit: BoxFit.cover,
-                        placeholder: (context, url) => const CircleAvatar(backgroundColor: Colors.grey),
-                        errorWidget: (context, url, error) => const CircleAvatar(child: Icon(Icons.person)),
+                        width: 40,
+                        height: 40,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) =>
+                            const CircleAvatar(backgroundColor: Colors.grey),
+                        errorWidget: (context, url, error) =>
+                            const CircleAvatar(child: Icon(Icons.person)),
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Expanded(child: Text(userName, style: const TextStyle(fontWeight: FontWeight.bold))),
+                    Expanded(
+                        child: Text(userName,
+                            style:
+                                const TextStyle(fontWeight: FontWeight.bold))),
                     RatingBarIndicator(
                       rating: (reviewData['rating'] as num).toDouble(),
-                      itemBuilder: (context, index) => const Icon(Icons.star, color: Colors.amber),
+                      itemBuilder: (context, index) =>
+                          const Icon(Icons.star, color: Colors.amber),
                       itemCount: 5,
                       itemSize: 16.0,
                     ),
                   ],
                 ),
                 const SizedBox(height: 12),
-                Text(reviewData['reviewText'] ?? '', style: const TextStyle(height: 1.4)),
+                Text(reviewData['reviewText'] ?? '',
+                    style: const TextStyle(height: 1.4)),
               ],
             ),
           ),

@@ -1,9 +1,10 @@
 import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ecommerce_shop/pages/product_details.dart';
+import 'package:ecommerce_shop/widget/horizontal_card_shimmer.dart';
 import 'package:flutter/material.dart';
-import 'package:shimmer/shimmer.dart';
 
 class SearchPage extends StatefulWidget {
   final String userCity;
@@ -164,45 +165,6 @@ class _SearchPageState extends State<SearchPage> {
 
   // --- WIDGETS ---
 
-  Widget _buildSearchShimmer(bool isDark) {
-    final baseColor = isDark ? Colors.grey[800]! : Colors.grey[300]!;
-    final highlightColor = isDark ? Colors.grey[700]! : Colors.grey[100]!;
-    final containerColor = isDark ? Colors.grey[900] : Colors.white;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 0,
-      color: isDark ? Colors.transparent : Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Shimmer.fromColors(
-          baseColor: baseColor,
-          highlightColor: highlightColor,
-          child: Row(
-            children: [
-              Container(
-                width: 70, height: 70,
-                decoration: BoxDecoration(color: containerColor, borderRadius: BorderRadius.circular(8)),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(width: double.infinity, height: 16, color: containerColor),
-                    const SizedBox(height: 8),
-                    Container(width: 100, height: 14, color: containerColor),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildResultCard(Map<String, dynamic> data, bool isDark, ColorScheme colorScheme) {
     final bool isGlobalItem = (data['category'] ?? '') != 'Furniture';
     final String itemCity = data['city'] ?? 'India';
@@ -298,6 +260,7 @@ class _SearchPageState extends State<SearchPage> {
         backgroundColor: colorScheme.surface,
         elevation: 0,
         leading: IconButton(
+          tooltip: 'Back',
           icon: Icon(Icons.arrow_back, color: colorScheme.onSurface),
           onPressed: () => Navigator.pop(context),
         ),
@@ -316,6 +279,7 @@ class _SearchPageState extends State<SearchPage> {
         actions: [
           if (_searchController.text.isNotEmpty)
             IconButton(
+              tooltip: 'Clear search',
               icon: Icon(Icons.clear, color: colorScheme.onSurface),
               onPressed: () {
                 _searchController.clear();
@@ -376,7 +340,7 @@ class _SearchPageState extends State<SearchPage> {
                     ? ListView.builder(
                         padding: const EdgeInsets.all(16),
                         itemCount: 5,
-                        itemBuilder: (_,__) => _buildSearchShimmer(isDark))
+                        itemBuilder: (_,__) => const HorizontalCardShimmer())
                     : _searchResults.isEmpty && _searchController.text.isNotEmpty && !_showAutocomplete
                         ? Center(
                             child: Column(

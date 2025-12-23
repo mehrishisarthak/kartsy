@@ -1,15 +1,13 @@
 import 'package:ecommerce_shop/pages/cart.dart';
 import 'package:ecommerce_shop/pages/home.dart';
 import 'package:ecommerce_shop/pages/interest_list_page.dart';
+import 'package:ecommerce_shop/widget/cart_icon_with_badge.dart';
 import 'package:flutter/material.dart';
 
 class BottomBar extends StatefulWidget {
   final String userId; // 1. Receive ID directly
 
-  const BottomBar({
-    super.key, 
-    required this.userId
-  });
+  const BottomBar({super.key, required this.userId});
 
   @override
   State<BottomBar> createState() => _BottomBarState();
@@ -25,10 +23,10 @@ class _BottomBarState extends State<BottomBar> {
     // 2. Initialize pages immediately using widget.userId
     // No async/await, no isLoading, no SharedPreferences needed!
     pages = [
-  HomeScreen(userId: widget.userId),
-  CartPage(userId: widget.userId),
-  InterestListPage(userId: widget.userId),
-];
+      HomeScreen(userId: widget.userId),
+      CartPage(userId: widget.userId),
+      InterestListPage(userId: widget.userId),
+    ];
   }
 
   // 3. Handle Android Back Button behavior
@@ -78,15 +76,15 @@ class _BottomBarState extends State<BottomBar> {
               label: 'Home',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.shopping_cart_outlined),
-              activeIcon: Icon(Icons.shopping_cart),
+              icon: CartIconWithBadge(isActive: false),
+              activeIcon: CartIconWithBadge(isActive: true),
               label: 'Cart',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.favorite_outline),
               label: 'Interests',
               activeIcon: Icon(Icons.favorite),
-              )
+            )
           ],
         ),
       ),

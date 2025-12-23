@@ -7,6 +7,7 @@ import 'package:ecommerce_shop/services/shared_preferences.dart';
 import 'package:ecommerce_shop/services/shimmer/profile_shimmer.dart';
 import 'package:ecommerce_shop/utils/constants.dart'; // Ensure this is imported
 import 'package:ecommerce_shop/utils/region_config.dart';
+import 'package:ecommerce_shop/utils/show_snackbar.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
@@ -25,9 +26,9 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   final SharedPreferenceHelper _prefs = SharedPreferenceHelper();
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  
+
   Map<String, dynamic>? personData;
-  Map<String, dynamic>? _initialAddress; 
+  Map<String, dynamic>? _initialAddress;
   String? _initialImage;
 
   File? _imageFile;
@@ -51,15 +52,16 @@ class _ProfilePageState extends State<ProfilePage> {
   void initState() {
     super.initState();
     userID = widget.userId;
-    _initializePage(); 
+    _initializePage();
 
     _localAddressController.addListener(_onFieldChanged);
     _pincodeController.addListener(_onFieldChanged);
     _mobileController.addListener(_onFieldChanged);
 
     _mobileController.addListener(() {
-      if (_isPhoneVerified && '+91${_mobileController.text.trim()}' != _verifiedPhoneNumber) {
-        if(mounted && _isPhoneVerified) setState(() => _isPhoneVerified = false);
+      if (_isPhoneVerified &&
+          '+91${_mobileController.text.trim()}' != _verifiedPhoneNumber) {
+        if (mounted && _isPhoneVerified) setState(() => _isPhoneVerified = false);
       }
       _onFieldChanged();
     });
@@ -70,8 +72,8 @@ class _ProfilePageState extends State<ProfilePage> {
   /// 2. Fetches "User Profile" from Firestore
   Future<void> _initializePage() async {
     await Future.wait([
-      RegionService.init(), 
-      _loadUserData(),      
+      RegionService.init(),
+      _loadUserData(),
     ]);
 
     if (mounted) {
@@ -102,16 +104,16 @@ class _ProfilePageState extends State<ProfilePage> {
           .collection('users')
           .doc(userID)
           .get();
-      
+
       if (doc.exists && mounted) {
         final firestoreData = doc.data()!;
         if (mounted) {
-           setState(() {
+          setState(() {
             personData = firestoreData;
             _initialImage = firestoreData['Image'];
           });
         }
-        
+
         final address = firestoreData['Address'];
         if (address is Map<String, dynamic>) {
           _updateAddressFields(address, isInitialLoad: true);
@@ -125,13 +127,13 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   /// ✅ SMART DEFAULT LOGIC:
-  /// Uses the dynamically fetched RegionService data to pre-fill 
+  /// Uses the dynamically fetched RegionService data to pre-fill
   /// the dropdowns if the user has no address set.
   void _applyServiceableDefaults() {
     if (RegionService.getStates().isNotEmpty) {
       final defaultState = RegionService.getStates().first;
       final defaultCities = RegionService.getCities(defaultState);
-      
+
       setState(() {
         _selectedState = defaultState;
         _cities = defaultCities;
@@ -142,14 +144,16 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  void _updateAddressFields(Map<String, dynamic> address, {bool isInitialLoad = false}) {
+  void _updateAddressFields(Map<String, dynamic> address,
+      {bool isInitialLoad = false}) {
     final mobile = address['mobile'] ?? '';
 
     setState(() {
       // ✅ DYNAMIC VALIDATION
       String? loadedState = address['state'];
       // Check if the loaded state is in our FETCHED serviceable list
-      if (loadedState != null && RegionService.getStates().contains(loadedState)) {
+      if (loadedState != null &&
+          RegionService.getStates().contains(loadedState)) {
         _selectedState = loadedState;
         _cities = RegionService.getCities(_selectedState);
       } else {
@@ -170,11 +174,13 @@ class _ProfilePageState extends State<ProfilePage> {
       _mobileController.text = mobile.replaceFirst('+91', '');
 
       final currentUser = _auth.currentUser;
-      if (currentUser != null && currentUser.phoneNumber == mobile && mobile.isNotEmpty) {
+      if (currentUser != null &&
+          currentUser.phoneNumber == mobile &&
+          mobile.isNotEmpty) {
         _isPhoneVerified = true;
         _verifiedPhoneNumber = mobile;
       }
-      
+
       if (isInitialLoad) {
         _initialAddress = {
           'state': _selectedState,
@@ -191,36 +197,40 @@ class _ProfilePageState extends State<ProfilePage> {
     if (_initialAddress == null) return true;
     if (_imageFile != null) return true;
 
-    final currentMobile = _mobileController.text.trim().isEmpty ? null : '+91${_mobileController.text.trim()}';
-    
+    final currentMobile = _mobileController.text.trim().isEmpty
+        ? null
+        : '+91${_mobileController.text.trim()}';
+
     final currentAddress = {
       'state': _selectedState,
       'city': _selectedCity,
       'local': _localAddressController.text.trim(),
       'pincode': _pincodeController.text.trim(),
-      'mobile': _isPhoneVerified ? _verifiedPhoneNumber : currentMobile, 
+      'mobile': _isPhoneVerified ? _verifiedPhoneNumber : currentMobile,
     };
 
     return _initialAddress!['state'] != currentAddress['state'] ||
-           _initialAddress!['city'] != currentAddress['city'] ||
-           _initialAddress!['local'] != currentAddress['local'] ||
-           _initialAddress!['pincode'] != currentAddress['pincode'] ||
-           _initialAddress!['mobile'] != currentAddress['mobile'] ||
-           (_imageFile != null && _imageFile!.path.isNotEmpty) ||
-           (_initialImage != null && _imageFile != null);
+        _initialAddress!['city'] != currentAddress['city'] ||
+        _initialAddress!['local'] != currentAddress['local'] ||
+        _initialAddress!['pincode'] != currentAddress['pincode'] ||
+        _initialAddress!['mobile'] != currentAddress['mobile'] ||
+        (_imageFile != null && _imageFile!.path.isNotEmpty) ||
+        (_initialImage != null && _imageFile != null);
   }
 
   Future<void> _pickImage() async {
     try {
-      final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
+      final picked =
+          await ImagePicker().pickImage(source: ImageSource.gallery);
       if (picked != null) {
         File imageFile = File(picked.path);
-        
+
         int sizeInBytes = await imageFile.length();
         double sizeInMB = sizeInBytes / (1024 * 1024);
-        
+
         if (sizeInMB > 1.0) {
-          final String targetPath = '${imageFile.parent.path}/${DateTime.now().millisecondsSinceEpoch}_compressed.jpg';
+          final String targetPath =
+              '${imageFile.parent.path}/${DateTime.now().millisecondsSinceEpoch}_compressed.jpg';
           var result = await FlutterImageCompress.compressAndGetFile(
             imageFile.absolute.path,
             targetPath,
@@ -230,29 +240,23 @@ class _ProfilePageState extends State<ProfilePage> {
           );
           if (result != null) imageFile = File(result.path);
         }
-        
+
         setState(() => _imageFile = imageFile);
         _onFieldChanged();
       }
     } catch (e) {
-      _showErrorSnackBar("Failed to pick image: $e");
-    }
-  }
-
-  void _showErrorSnackBar(String message) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message), backgroundColor: Theme.of(context).colorScheme.error),
-      );
+      showCustomSnackBar(context, "Failed to pick image: $e",
+          type: SnackBarType.error);
     }
   }
 
   Future<void> _verifyPhoneNumber() async {
     if (_mobileController.text.trim().length != 10) {
-      _showErrorSnackBar("Please enter a valid 10-digit mobile number.");
+      showCustomSnackBar(context, "Please enter a valid 10-digit mobile number.",
+          type: SnackBarType.error);
       return;
     }
-    
+
     setState(() => _isLoading = true);
 
     try {
@@ -264,9 +268,12 @@ class _ProfilePageState extends State<ProfilePage> {
           .where('Address.mobile', isEqualTo: phoneNumber)
           .limit(1)
           .get();
-      
-      if (querySnapshot.docs.isNotEmpty && querySnapshot.docs.first.id != currentUser?.uid) {
-        _showErrorSnackBar("Phone number is already in use by another account.");
+
+      if (querySnapshot.docs.isNotEmpty &&
+          querySnapshot.docs.first.id != currentUser?.uid) {
+        showCustomSnackBar(
+            context, "This phone number is already in use by another account.",
+            type: SnackBarType.error);
         setState(() => _isLoading = false);
         return;
       }
@@ -281,9 +288,9 @@ class _ProfilePageState extends State<ProfilePage> {
                 _isPhoneVerified = true;
                 _verifiedPhoneNumber = phoneNumber;
               });
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Phone number verified automatically!"), backgroundColor: Colors.green)
-              );
+              showCustomSnackBar(
+                  context, "Phone number verified automatically!",
+                  type: SnackBarType.success);
             }
           } catch (e) {
             // Already linked or error
@@ -292,7 +299,10 @@ class _ProfilePageState extends State<ProfilePage> {
           }
         },
         verificationFailed: (FirebaseAuthException e) {
-          if (mounted) _showErrorSnackBar("Failed to verify phone number: ${e.message}");
+          if (mounted)
+            showCustomSnackBar(
+                context, "Failed to verify phone number: ${e.message}",
+                type: SnackBarType.error);
           if (mounted) setState(() => _isLoading = false);
         },
         codeSent: (String verificationId, int? resendToken) {
@@ -306,7 +316,9 @@ class _ProfilePageState extends State<ProfilePage> {
         },
       );
     } catch (e) {
-      if (mounted) _showErrorSnackBar("An error occurred. Please try again.");
+      if (mounted)
+        showCustomSnackBar(context, "An error occurred. Please try again.",
+            type: SnackBarType.error);
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -326,12 +338,11 @@ class _ProfilePageState extends State<ProfilePage> {
         ),
         actions: [
           TextButton(
-            onPressed: () { 
-              Navigator.pop(context);
-              if (mounted) setState(() => _isLoading = false); 
-            }, 
-            child: const Text("Cancel")
-          ),
+              onPressed: () {
+                Navigator.pop(context);
+                if (mounted) setState(() => _isLoading = false);
+              },
+              child: const Text("Cancel")),
           ElevatedButton(
             onPressed: () async {
               if (_verificationId == null) return;
@@ -344,16 +355,18 @@ class _ProfilePageState extends State<ProfilePage> {
                 if (mounted) {
                   setState(() {
                     _isPhoneVerified = true;
-                    _verifiedPhoneNumber = '+91${_mobileController.text.trim()}';
+                    _verifiedPhoneNumber =
+                        '+91${_mobileController.text.trim()}';
                     _onFieldChanged();
                   });
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Phone number verified successfully!"), backgroundColor: Colors.green)
-                  );
+                  showCustomSnackBar(
+                      context, "Phone number verified successfully!",
+                      type: SnackBarType.success);
                 }
               } catch (e) {
-                _showErrorSnackBar("Invalid OTP. Please try again.");
+                showCustomSnackBar(context, "Invalid OTP. Please try again.",
+                    type: SnackBarType.error);
               } finally {
                 if (mounted) setState(() => _isLoading = false);
               }
@@ -367,25 +380,32 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _saveProfile() async {
     if (!_hasChanges()) {
-      _showErrorSnackBar("No changes to save.");
+      showCustomSnackBar(context, "No changes to save.",
+          type: SnackBarType.info);
       return;
     }
     if (!_isPhoneVerified) {
-      _showErrorSnackBar("Please verify your phone number before saving.");
+      showCustomSnackBar(
+          context, "Please verify your phone number before saving.",
+          type: SnackBarType.error);
       return;
     }
-    if (_selectedState == null || _selectedCity == null || 
-        _localAddressController.text.trim().isEmpty || 
+    if (_selectedState == null ||
+        _selectedCity == null ||
+        _localAddressController.text.trim().isEmpty ||
         _pincodeController.text.trim().length != 6) {
-      _showErrorSnackBar("Please fill all address fields correctly.");
+      showCustomSnackBar(
+          context, "Please fill all address fields correctly.",
+          type: SnackBarType.error);
       return;
     }
-    
+
     setState(() => _isLoading = true);
     final userID = FirebaseAuth.instance.currentUser?.uid;
 
     if (userID == null) {
-      _showErrorSnackBar("Session expired. Please login again.");
+      showCustomSnackBar(context, "Session expired. Please login again.",
+          type: SnackBarType.error);
       setState(() => _isLoading = false);
       return;
     }
@@ -412,11 +432,13 @@ class _ProfilePageState extends State<ProfilePage> {
       };
 
       final completeUserProfile = {
-        'Name': personData?['Name'] ?? _auth.currentUser?.displayName ?? 'User',
+        'Name':
+            personData?['Name'] ?? _auth.currentUser?.displayName ?? 'User',
         'Email': personData?['Email'] ?? _auth.currentUser?.email ?? '',
         'Image': imageUrl,
         'Address': structuredAddress,
-        'createdAt': personData?['createdAt'] ?? FieldValue.serverTimestamp(),
+        'createdAt':
+            personData?['createdAt'] ?? FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
@@ -426,23 +448,23 @@ class _ProfilePageState extends State<ProfilePage> {
           .set(completeUserProfile, SetOptions(merge: true));
 
       await _prefs.saveUserAddress(structuredAddress);
-      
+
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile updated successfully!'), backgroundColor: Colors.green)
-        );
+        showCustomSnackBar(context, "Profile updated successfully!",
+            type: SnackBarType.success);
       }
-      
+
       await _loadUserData(); // Reload to refresh state
-      
     } catch (e) {
-      if (mounted) _showErrorSnackBar('Failed to save profile: ${e.toString()}');
+      if (mounted)
+        showCustomSnackBar(context, 'Failed to save profile: ${e.toString()}',
+            type: SnackBarType.error);
     } finally {
       if (mounted) {
-        setState(() { 
-          _isLoading = false; 
-          _imageFile = null; 
-          _onFieldChanged(); 
+        setState(() {
+          _isLoading = false;
+          _imageFile = null;
+          _onFieldChanged();
         });
       }
     }
@@ -505,17 +527,20 @@ class _ProfilePageState extends State<ProfilePage> {
 
     final bool hasChanges = _hasChanges();
     final bool isButtonDisabled = _isLoading || !hasChanges;
-    final Color buttonColor = isButtonDisabled ? Colors.grey : colorScheme.primary;
+    final Color buttonColor =
+        isButtonDisabled ? Colors.grey : colorScheme.primary;
 
     // --- UPDATED IMAGE LOGIC TO MATCH HOME SCREEN ---
     ImageProvider imageProvider;
     if (_imageFile != null) {
       imageProvider = FileImage(_imageFile!);
-    } else if (personData?['Image'] != null && personData!['Image'].toString().isNotEmpty) {
+    } else if (personData?['Image'] != null &&
+        personData!['Image'].toString().isNotEmpty) {
       imageProvider = CachedNetworkImageProvider(personData!['Image']);
     } else {
       // FIX: Use the constant URL used in Home Screen (no local asset path errors)
-      imageProvider = CachedNetworkImageProvider(AppConstants.defaultProfileImage);
+      imageProvider =
+          CachedNetworkImageProvider(AppConstants.defaultProfileImage);
     }
     // ------------------------------------------------
 
@@ -524,18 +549,21 @@ class _ProfilePageState extends State<ProfilePage> {
       appBar: AppBar(
         actions: [
           IconButton(
+            tooltip: 'My Orders',
             icon: const Icon(Icons.shopping_bag_outlined),
             onPressed: () {
               if (widget.userId != null) {
                 Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (context) => UserOrdersPage(userId: widget.userId!),
+                    builder: (context) =>
+                        UserOrdersPage(userId: widget.userId!),
                   ),
                 );
               }
             },
           ),
           IconButton(
+            tooltip: 'Settings',
             icon: const Icon(Icons.settings),
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (context) => const SettingsPage()),
@@ -543,13 +571,14 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
         ],
         leading: IconButton(
+          tooltip: 'Back',
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text("Edit Profile"),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 24, 24, 100), 
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 100),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -576,7 +605,8 @@ class _ProfilePageState extends State<ProfilePage> {
                       color: colorScheme.primary,
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(Icons.edit, color: colorScheme.onPrimary, size: 20),
+                    child: Icon(Icons.edit,
+                        color: colorScheme.onPrimary, size: 20),
                   ),
                 ],
               ),
@@ -584,7 +614,8 @@ class _ProfilePageState extends State<ProfilePage> {
             const SizedBox(height: 12),
             Text(
               personData?['Name'] ?? 'User',
-              style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+              style:
+                  textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 6),
             Text(
@@ -600,7 +631,8 @@ class _ProfilePageState extends State<ProfilePage> {
                   children: [
                     Text(
                       "Contact & Address Info",
-                      style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                      style: textTheme.titleLarge
+                          ?.copyWith(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 20),
                     TextFormField(
@@ -613,39 +645,47 @@ class _ProfilePageState extends State<ProfilePage> {
                       ],
                       decoration: InputDecoration(
                         hintText: "98765 43210",
-                        prefixIcon: Icon(Icons.phone_android, color: colorScheme.primary),
+                        prefixIcon: Icon(Icons.phone_android,
+                            color: colorScheme.primary),
                         prefixText: "+91 ",
-                        fillColor: _isPhoneVerified ? Colors.grey.shade200.withAlpha(128) : null,
+                        fillColor: _isPhoneVerified
+                            ? Colors.grey.shade200.withAlpha(128)
+                            : null,
                         filled: _isPhoneVerified,
                         suffixIcon: TextButton(
-                          onPressed: _isPhoneVerified ? null : _verifyPhoneNumber,
+                          onPressed:
+                              _isPhoneVerified ? null : _verifyPhoneNumber,
                           child: _isLoading
                               ? const SizedBox(
                                   height: 20,
                                   width: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
                                 )
                               : _isPhoneVerified
                                   ? Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        const Icon(Icons.check_circle, color: Colors.green),
+                                        const Icon(Icons.check_circle,
+                                            color: Colors.green),
                                         const SizedBox(width: 4),
                                         Text(
                                           "Verified",
-                                          style: TextStyle(color: colorScheme.onSurface),
+                                          style: TextStyle(
+                                              color: colorScheme.onSurface),
                                         ),
                                       ],
                                     )
                                   : Text(
                                       "Verify",
-                                      style: TextStyle(color: colorScheme.primary),
+                                      style:
+                                          TextStyle(color: colorScheme.primary),
                                     ),
                         ),
                       ),
                     ),
                     const SizedBox(height: 16),
-                    
+
                     // ✅ FETCHED STATE DROPDOWN (Using RegionService)
                     _buildDropdown(
                       hint: "Select State",
@@ -657,7 +697,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           // Fetch cities for this state from Service
                           _cities = RegionService.getCities(newValue);
                           _selectedCity = null;
-                          
+
                           // Auto-select if only 1 city
                           if (_cities.length == 1) {
                             _selectedCity = _cities.first;
@@ -666,7 +706,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       },
                     ),
                     const SizedBox(height: 16),
-                    
+
                     // ✅ FETCHED CITY DROPDOWN (Using RegionService)
                     _buildDropdown(
                       hint: "Select City",
@@ -674,7 +714,8 @@ class _ProfilePageState extends State<ProfilePage> {
                       items: _cities,
                       onChanged: _selectedState == null
                           ? null
-                          : (newValue) => setState(() => _selectedCity = newValue),
+                          : (newValue) =>
+                              setState(() => _selectedCity = newValue),
                     ),
                     const SizedBox(height: 16),
                     _buildTextField(
@@ -733,8 +774,10 @@ class _ProfilePageState extends State<ProfilePage> {
               foregroundColor: colorScheme.onPrimary,
               disabledBackgroundColor: Colors.grey.shade400,
               disabledForegroundColor: Colors.grey.shade700,
-              textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              textStyle:
+                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
             ),
           ),
         ),
